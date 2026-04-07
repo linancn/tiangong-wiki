@@ -45,7 +45,6 @@ function normalizeEnv(input: CodexWorkflowInput): Record<string, string> {
     }
   }
   normalized.PATH = [input.skillArtifactsPath, normalized.PATH].filter(Boolean).join(path.delimiter);
-  normalized.WIKI_CLI_WRAPPER = path.join(input.skillArtifactsPath, "wiki");
   return normalized;
 }
 

@@ -17,10 +17,27 @@ export interface WorkflowArtifactSet {
 
 export interface VaultWorkflowPromptInput {
   workspaceRoot: string;
-  packageRoot: string;
   vaultFilePath: string;
   resultJsonPath: string;
   allowTemplateEvolution: boolean;
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function resolveNodeExecutable(): string {
+  const currentExec = path.basename(process.execPath).toLowerCase();
+  if (currentExec === "node" || currentExec.startsWith("node")) {
+    return process.execPath;
+  }
+
+  const npmNodeExecPath = process.env.npm_node_execpath?.trim();
+  if (npmNodeExecPath) {
+    return npmNodeExecPath;
+  }
+
+  return "node";
 }
 
 function readableArtifactPrefix(queueItemId: string): string {
@@ -57,28 +74,21 @@ export function buildVaultWorkflowPrompt(input: VaultWorkflowPromptInput): strin
     "Process one vault queue item.",
     "",
     `WORKSPACE_ROOT=${input.workspaceRoot}`,
-    `SKILL_PACKAGE_ROOT=${input.packageRoot}`,
     `VAULT_FILE_PATH=${input.vaultFilePath}`,
     `RESULT_JSON_PATH=${input.resultJsonPath}`,
     `ALLOW_TEMPLATE_EVOLUTION=${input.allowTemplateEvolution ? "true" : "false"}`,
     "",
-    "A wiki CLI wrapper is already available on PATH for this run.",
+    "Workspace-local skills are available from WORKSPACE_ROOT through normal Codex skill discovery.",
+    "A local wiki CLI launcher is already available on PATH for this run.",
     "Read queue-item.json next to RESULT_JSON_PATH before acting.",
     "Then read only the target vault file and the minimum wiki CLI outputs needed for a decision.",
-    "If you need the task contract, read SKILL_PACKAGE_ROOT/references/vault-to-wiki-instruction.md.",
-    "If you need CLI details, read SKILL_PACKAGE_ROOT/references/cli-interface.md.",
-    "Use installed skills only as needed.",
     "Keep the run narrowly focused on the target vault file, the current ontology, and the best candidate pages.",
     "Do not inspect the whole workspace, list broad file trees, or read large reference files unless a concrete command failure blocks you.",
-    "Do not call wiki --help; prefer targeted commands, or wiki <command> --help only when a specific command is unclear.",
-    "Use only the supported CLI surface: wiki type list --format json, wiki type show <type> --format json, wiki type recommend --text <summary> --keywords <a,b> --format json, wiki find, wiki fts <query>, wiki page-info <pageId>, wiki sync --path <page>, wiki lint --path <page> --format json.",
-    "Do not use guessed commands such as wiki page find or wiki page list. wiki find and wiki list already emit JSON; do not add --format json to them.",
+    "Do not call wiki --help or perform broad discovery unless a specific command failure forces it.",
     "Do not assume any current wiki type, template, or default target type.",
     "Discover the current ontology and relevant existing pages through the wiki CLI before making changes.",
-    "If the vault file clearly revises an existing page, prefer the smallest in-place update that preserves provenance.",
-    "Use source-summary only when the source itself deserves a reusable standalone page; revision notes usually do not.",
-    "Start with likely existing pages before using type recommendation. Use wiki type recommend only when the target type is still unclear.",
     "Do not put raw vault file paths into sourceRefs. sourceRefs may only contain existing wiki page ids; keep raw file provenance in the page body or a dedicated source field such as vaultPath when that type supports it.",
+    "If ALLOW_TEMPLATE_EVOLUTION=false, do not create templates or new page types.",
     "For every changed page, run wiki sync --path <page> and wiki lint --path <page> --format json before finishing.",
     "The authoritative threadId is queue-item.json.threadId. Read it from there and copy it unchanged into result.json.threadId. If it is empty on first read, read queue-item.json again immediately before writing the manifest.",
     "Write RESULT_JSON_PATH as one JSON object with: status, decision, reason, threadId, skillsUsed, createdPageIds, updatedPageIds, appliedTypeNames, proposedTypes, actions, lint.",
@@ -109,37 +119,26 @@ export function ensureWorkflowArtifactSet(
   ensureDirSync(artifacts.skillArtifactsPath);
 
   const wikiCliWrapperPath = path.join(artifacts.skillArtifactsPath, "wiki");
+  const nodeExecutable = resolveNodeExecutable();
+  const cliEntrypoint = path.join(paths.packageRoot, "dist", "index.js");
   writeTextFileSync(artifacts.queueItemPath, `${JSON.stringify(input.queueItem, null, 2)}\n`);
   writeTextFileSync(
     wikiCliWrapperPath,
     [
       "#!/bin/sh",
-      'wrapper_path=${WIKI_CLI_WRAPPER:-$0}',
-      'wrapper_dir=${wrapper_path%/*}',
-      'if [ "$wrapper_dir" = "$wrapper_path" ]; then',
-      '  wrapper_dir=.',
+      'node_bin=${WIKI_CLI_NODE:-}',
+      'if [ -z "$node_bin" ]; then',
+      `  node_bin=${shellSingleQuote(nodeExecutable)}`,
       "fi",
-      "original_ifs=$IFS",
-      "IFS=:",
-      'clean_path=""',
-      "for entry in $PATH; do",
-      '  if [ "$entry" = "$wrapper_dir" ]; then',
-      "    continue",
-      "  fi",
-      '  if [ -z "$clean_path" ]; then',
-      "    clean_path=$entry",
-      "  else",
-      '    clean_path="${clean_path}:$entry"',
-      "  fi",
-      "done",
-      "IFS=$original_ifs",
-      "PATH=$clean_path",
-      "export PATH",
-      'if ! command -v wiki >/dev/null 2>&1; then',
-      '  echo "wiki CLI not found on PATH after removing wrapper directory: ${wrapper_dir}" >&2',
+      'cli_entry=${WIKI_CLI_ENTRYPOINT:-}',
+      'if [ -z "$cli_entry" ]; then',
+      `  cli_entry=${shellSingleQuote(cliEntrypoint)}`,
+      "fi",
+      'if [ ! -f "$cli_entry" ]; then',
+      '  echo "wiki CLI entrypoint not found: ${cli_entry}" >&2',
       "  exit 127",
       "fi",
-      'exec wiki "$@"',
+      'exec "$node_bin" "$cli_entry" "$@"',
       "",
     ].join("\n"),
   );

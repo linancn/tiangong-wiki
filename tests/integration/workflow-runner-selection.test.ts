@@ -1,4 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,8 +10,10 @@ import {
   type CodexWorkflowInput,
   type CodexWorkflowRunner,
 } from "../../src/core/codex-workflow.js";
+import { resolveRuntimePaths } from "../../src/core/paths.js";
 import { processVaultQueueBatch } from "../../src/core/vault-processing.js";
 import type { WorkflowResultManifest } from "../../src/core/workflow-result.js";
+import { ensureWikiSkillInstall } from "../../src/core/workspace-skills.js";
 import { AppError } from "../../src/utils/errors.js";
 import {
   cleanupWorkspace,
@@ -141,6 +144,55 @@ describe("workflow runner selection", () => {
     );
     expect(queueRows.every((row) => typeof row.threadId === "string" && row.threadId.length > 0)).toBe(true);
     expect(queueRows.every((row) => typeof row.resultManifestPath === "string" && row.resultManifestPath.length > 0)).toBe(true);
+  });
+
+  it("prepares workflow input from workspace root so workspace-local skills are discoverable", async () => {
+    const workspace = createWorkspace(baseEnv({ WIKI_AGENT_BATCH_SIZE: "1" }));
+    workspaces.push(workspace);
+    writeVaultFile(workspace, "imports/spec.pdf", "Durable spec content.");
+
+    runCli(["init"], workspace.env);
+
+    const runtimePaths = resolveRuntimePaths(workspace.env);
+    ensureWikiSkillInstall(workspace.wikiPath, runtimePaths.packageRoot);
+    const parserSkillDir = path.join(workspace.root, ".agents", "skills", "pdf");
+    mkdirSync(parserSkillDir, { recursive: true });
+    writeFileSync(path.join(parserSkillDir, "SKILL.md"), "---\nname: pdf\ndescription: parser\n---\n", "utf8");
+
+    const observedInputs: CodexWorkflowInput[] = [];
+    const runner = new FakeCodexWorkflowRunner(({ threadId, input }) => {
+      observedInputs.push(input);
+      return {
+        status: "done",
+        decision: "apply",
+        reason: "Captured the durable spec.",
+        threadId,
+        skillsUsed: ["wiki-skill", "pdf"],
+        createdPageIds: ["concepts/spec.md"],
+        updatedPageIds: [],
+        appliedTypeNames: ["concept"],
+        proposedTypes: [],
+        actions: [
+          {
+            kind: "create_page",
+            pageType: "concept",
+            pageId: "concepts/spec.md",
+            title: "Spec",
+            summary: "Created a concept page from the spec.",
+          },
+        ],
+        lint: [{ pageId: "concepts/spec.md", errors: 0, warnings: 0 }],
+      };
+    });
+
+    const result = await processVaultQueueBatch(workspace.env, { workflowRunner: runner });
+    expect(result).toMatchObject({ processed: 1, done: 1, errored: 0 });
+    expect(observedInputs).toHaveLength(1);
+    expect(observedInputs[0]?.workspaceRoot).toBe(workspace.root);
+    expect(observedInputs[0]?.promptText).toContain("Workspace-local skills are available from WORKSPACE_ROOT");
+    expect(observedInputs[0]?.promptText).not.toContain("SKILL_PACKAGE_ROOT=");
+    expect(existsSync(path.join(workspace.root, ".agents", "skills", "wiki-skill", "SKILL.md"))).toBe(true);
+    expect(existsSync(path.join(workspace.root, ".agents", "skills", "pdf", "SKILL.md"))).toBe(true);
   });
 
   it("resumes existing threads and records runner failures with root causes", async () => {

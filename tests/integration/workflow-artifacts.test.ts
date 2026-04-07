@@ -69,7 +69,7 @@ describe("workflow artifacts", () => {
     ]);
   });
 
-  it("creates a wiki wrapper that forwards to the next wiki binary on PATH", () => {
+  it("creates a wiki wrapper that executes the packaged CLI entrypoint directly", () => {
     const workspace = createWorkspace();
     workspaces.push(workspace);
     const paths = resolveRuntimePaths(workspace.env);
@@ -82,28 +82,28 @@ describe("workflow artifacts", () => {
       },
     });
 
-    const realWikiBinDir = path.join(workspace.root, "real-wiki-bin");
-    mkdirSync(realWikiBinDir, { recursive: true });
-    const realWikiPath = path.join(realWikiBinDir, "wiki");
+    const fakeNodeBinDir = path.join(workspace.root, "fake-node-bin");
+    mkdirSync(fakeNodeBinDir, { recursive: true });
+    const fakeNodePath = path.join(fakeNodeBinDir, "node");
     writeFileSync(
-      realWikiPath,
-      ['#!/bin/sh', 'printf "real wiki:%s\\n" "$*"', ""].join("\n"),
+      fakeNodePath,
+      ['#!/bin/sh', 'printf "node exec:%s\\n" "$*"', ""].join("\n"),
       "utf8",
     );
-    chmodSync(realWikiPath, 0o755);
+    chmodSync(fakeNodePath, 0o755);
 
     const wrapperPath = path.join(artifacts.skillArtifactsPath, "wiki");
     const result = spawnSync(wrapperPath, ["sync", "--path", "concepts/bayes-theorem.md"], {
       encoding: "utf8",
       env: {
         ...process.env,
-        PATH: [artifacts.skillArtifactsPath, realWikiBinDir, process.env.PATH].filter(Boolean).join(path.delimiter),
-        WIKI_CLI_WRAPPER: wrapperPath,
+        PATH: [artifacts.skillArtifactsPath, process.env.PATH].filter(Boolean).join(path.delimiter),
+        WIKI_CLI_NODE: fakeNodePath,
       },
     });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("real wiki:sync --path concepts/bayes-theorem.md");
+    expect(result.stdout).toContain(`node exec:${path.join(paths.packageRoot, "dist", "index.js")} sync --path concepts/bayes-theorem.md`);
   });
 });

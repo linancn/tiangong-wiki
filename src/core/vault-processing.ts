@@ -473,7 +473,6 @@ function prepareCodexWorkflowInput(
   const artifacts = getWorkflowArtifactSet(paths, item.fileId);
   const promptText = buildVaultWorkflowPrompt({
     workspaceRoot,
-    packageRoot: paths.packageRoot,
     vaultFilePath: localFilePath,
     resultJsonPath: artifacts.resultPath,
     allowTemplateEvolution,
@@ -632,7 +631,7 @@ export async function processVaultQueueBatch(
       let resultManifestPath: string | null = null;
 
       try {
-        const localFilePath = ensureLocalVaultFile(file, paths.vaultPath, paths.packageRoot, env);
+        const localFilePath = await ensureLocalVaultFile(file, paths.vaultPath, env);
         const { artifacts, input } = prepareCodexWorkflowInput(
           paths,
           item,

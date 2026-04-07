@@ -114,8 +114,12 @@ describe("CodexSdkWorkflowRunner", () => {
     );
 
     expect(CodexConstructor).toHaveBeenCalledTimes(2);
+    const startOptions = startThread.mock.calls[0]?.[0] as Record<string, unknown>;
+    const resumeOptions = resumeThread.mock.calls[0]?.[1] as Record<string, unknown>;
+    const startClientOptions = CodexConstructor.mock.calls[0]?.[0] as { env?: Record<string, string> };
     expect(startThread).toHaveBeenCalledWith(
       expect.objectContaining({
+        workingDirectory: root,
         modelReasoningEffort: "low",
         sandboxMode: "workspace-write",
         networkAccessEnabled: true,
@@ -126,6 +130,7 @@ describe("CodexSdkWorkflowRunner", () => {
     expect(resumeThread).toHaveBeenCalledWith(
       "persisted-thread",
       expect.objectContaining({
+        workingDirectory: root,
         modelReasoningEffort: "low",
         sandboxMode: "workspace-write",
         networkAccessEnabled: true,
@@ -133,6 +138,10 @@ describe("CodexSdkWorkflowRunner", () => {
         webSearchMode: "disabled",
       }),
     );
+    expect(startOptions.additionalDirectories).toEqual([path.resolve(root, ".."), path.join(root, "skill-artifacts")]);
+    expect(resumeOptions.additionalDirectories).toEqual([path.resolve(root, ".."), path.join(root, "skill-artifacts")]);
+    expect(startClientOptions.env?.PATH?.startsWith(`${path.join(root, "skill-artifacts")}${path.delimiter}`)).toBe(true);
+    expect(startClientOptions.env?.WIKI_CLI_WRAPPER).toBeUndefined();
     const startedRun = startThread.mock.results[0]?.value.runStreamed as ReturnType<typeof vi.fn>;
     const resumedRun = resumeThread.mock.results[0]?.value.runStreamed as ReturnType<typeof vi.fn>;
     expect(startedRun).toHaveBeenCalledWith("Process the queue item.");

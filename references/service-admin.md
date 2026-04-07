@@ -73,7 +73,7 @@ wiki/
 - `queue-item.json`：本次 queue item 的最小输入元数据
 - `prompt.md`：给 Codex workflow 的薄 prompt
 - `result.json`：唯一可信的结构化结果契约
-- `skill-artifacts/`：workflow 运行时各类 skill 的中间产物目录
+- `skill-artifacts/`：workflow 运行时各类 skill 的中间产物目录；其中的 `wiki` launcher 会直接执行当前包的 `dist/index.js`
 
 service 依赖的核心表：
 
@@ -121,6 +121,9 @@ service 依赖的核心表：
 
 - `@openai/codex-sdk` 底层仍然会调用 `codex exec`，但对 service 来说它提供的是稳定的 thread API，而不是“把 CLI 当主执行协议”。
 - workflow 运行在 `workspace-write` sandbox 时，必须显式开启网络访问；否则 workflow 内部调用 `wiki type recommend`、`wiki search`、`wiki sync` 等依赖 embedding API 的命令会失败。
+- workflow 的 `workingDirectory` 固定为 workspace root，让 Codex 通过标准 skill discovery 自动发现 `workspace/.agents/skills/` 下的 `wiki-skill` 与 parser skills。
+- workflow `prompt.md` 只保留 queue item、`result.json`、thread 回填和模板演化 guardrail 等最小契约；具体 wiki / parser 行为由运行时发现的 skills 提供。
+- service 会把 `.queue-artifacts/<queue-item-id>/skill-artifacts/` 注入 `PATH`，其中的本地 `wiki` launcher 直接指向当前包的 `dist/index.js`，不依赖用户全局安装 CLI。
 
 CLI 在 workflow 内部仍然重要，但角色是：
 
@@ -179,6 +182,7 @@ service 在成功完成全量 `wiki sync` 后，可继续处理 queue：
 3. 生成 .queue-artifacts/<queue-item-id>/
 4. start 或 resume Codex thread
 5. Codex 在 workspace 内执行：
+   - 以 workspace root 作为工作目录，自动发现 workspace-local skills
    - 读取文件
    - 调用所需 skills
    - 用 wiki CLI discovery 当前 ontology 与已有页面
