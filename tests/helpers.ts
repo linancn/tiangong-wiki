@@ -23,6 +23,20 @@ export function distCliPath(): string {
   return path.join(projectRoot(), "dist", "index.js");
 }
 
+function nodeExecPath(): string {
+  const currentExec = path.basename(process.execPath).toLowerCase();
+  if (currentExec === "node" || currentExec.startsWith("node")) {
+    return process.execPath;
+  }
+
+  const npmNodeExecPath = process.env.npm_node_execpath?.trim();
+  if (npmNodeExecPath) {
+    return npmNodeExecPath;
+  }
+
+  return "node";
+}
+
 export function createWorkspace(extraEnv: NodeJS.ProcessEnv = {}): Workspace {
   const root = mkdtempSync(path.join(os.tmpdir(), "wiki-skill-"));
   const wikiRoot = path.join(root, "wiki");
@@ -53,12 +67,13 @@ export function cleanupWorkspace(workspace: Workspace): void {
 export function runCli(
   args: string[],
   env: NodeJS.ProcessEnv,
-  options: { allowFailure?: boolean; cwd?: string } = {},
+  options: { allowFailure?: boolean; cwd?: string; input?: string } = {},
 ): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(process.execPath, [distCliPath(), ...args], {
+  const result = spawnSync(nodeExecPath(), [distCliPath(), ...args], {
     cwd: options.cwd ?? projectRoot(),
     env,
     encoding: "utf8",
+    input: options.input,
   });
 
   if (!options.allowFailure && result.status !== 0) {
@@ -263,7 +278,7 @@ export async function startEmbeddingServer(
     process.on("SIGTERM", () => server.close(() => process.exit(0)));
   `;
 
-  const child = spawn(process.execPath, ["-e", script], {
+  const child = spawn(nodeExecPath(), ["-e", script], {
     env: {
       ...process.env,
       TEST_EMBED_DIMENSIONS: String(resolved.dimensions ?? 4),

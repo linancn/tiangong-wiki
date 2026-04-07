@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { cleanupWorkspace, createWorkspace, readFile } from "../helpers.js";
@@ -63,5 +67,43 @@ describe("workflow artifacts", () => {
       "result.json",
       "skill-artifacts",
     ]);
+  });
+
+  it("creates a wiki wrapper that forwards to the next wiki binary on PATH", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    const paths = resolveRuntimePaths(workspace.env);
+
+    const artifacts = ensureWorkflowArtifactSet(paths, {
+      queueItemId: "imports/spec.pdf",
+      queueItem: {
+        fileId: "imports/spec.pdf",
+        status: "pending",
+      },
+    });
+
+    const realWikiBinDir = path.join(workspace.root, "real-wiki-bin");
+    mkdirSync(realWikiBinDir, { recursive: true });
+    const realWikiPath = path.join(realWikiBinDir, "wiki");
+    writeFileSync(
+      realWikiPath,
+      ['#!/bin/sh', 'printf "real wiki:%s\\n" "$*"', ""].join("\n"),
+      "utf8",
+    );
+    chmodSync(realWikiPath, 0o755);
+
+    const wrapperPath = path.join(artifacts.skillArtifactsPath, "wiki");
+    const result = spawnSync(wrapperPath, ["sync", "--path", "concepts/bayes-theorem.md"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: [artifacts.skillArtifactsPath, realWikiBinDir, process.env.PATH].filter(Boolean).join(path.delimiter),
+        WIKI_CLI_WRAPPER: wrapperPath,
+      },
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("real wiki:sync --path concepts/bayes-theorem.md");
   });
 });

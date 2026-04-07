@@ -11,7 +11,7 @@
 所以，这份文档重点回答的是下面 4 个问题：
 
 1. 我应该把 `wiki-skill` 装到哪里，AI 才能看见它？
-2. `npm install`、`npm run build`、`node dist/index.js init` 到底应该在哪个目录运行？
+2. `npm install`、`npm run build`、`wiki init` 到底应该在哪个目录运行？
 3. `init`、`sync`、`create` 真正修改的是哪个目录？
 4. 我在对话里应该怎么要求 AI 使用这个 skill？
 
@@ -222,10 +222,10 @@ wiki-skill -> /Users/biao/Code/tiangong-ai-skills/wiki-skill
 ```bash
 npm install
 npm run build
-node dist/index.js --help
-node dist/index.js check-config
-node dist/index.js init
-node dist/index.js sync
+wiki --help
+wiki check-config
+wiki init
+wiki sync
 ```
 
 也就是应该在这里运行：
@@ -252,7 +252,7 @@ $CODEX_HOME/skills/wiki-skill
 
 ```bash
 cd $CODEX_HOME/skills/wiki-skill
-node dist/index.js init
+wiki init
 ```
 
 这条命令的“执行位置”是 skill 安装目录。
@@ -267,7 +267,7 @@ node dist/index.js init
 
 也就是说：
 
-- 当前 shell 所在目录，只决定 `dist/index.js` 能不能找到
+- 当前 shell 所在目录，不决定 `init` 会修改哪个业务目录
 - 真正被写入的业务目录，是环境变量决定的
 
 ### 3.4 如果你是 symlink 安装
@@ -335,16 +335,25 @@ export WIKI_SYNC_INTERVAL=86400
 
 这里要特别小心。
 
-`wiki-skill` 读取的是 `process.env`。也就是说：
+`wiki-skill` 优先读取 `process.env`，并且现在还会自动发现配置文件。也就是说：
 
 - 它读取的是进程环境变量
-- 它不会自动帮你解析一个普通的 `.env` 文件
+- 它会自动帮你发现最近的 `.wiki.env`
+- 如果设置了 `WIKI_ENV_FILE`，会优先加载那个文件
 
 因此，下面这种做法通常 **不够**：
 
 ```text
 只是把变量写进某个 .env 文件，但没有 export，也没有让 Codex 进程重新读取
 ```
+
+更推荐的做法是直接运行：
+
+```bash
+wiki setup
+```
+
+它会写一个 `.wiki.env`，后续从该工作区运行 `wiki` 命令时会自动加载。
 
 最稳妥的做法是二选一：
 
@@ -457,8 +466,8 @@ WIKI_PATH=/Users/biao/Desktop/my-knowledge-workspace/wiki/pages 已设置。
 AI 通常会做的事是：
 
 1. 进入 skill 安装目录
-2. 执行 `node dist/index.js check-config`
-3. 执行 `node dist/index.js init`
+2. 执行 `wiki check-config`
+3. 执行 `wiki init`
 4. 检查 `$WORKSPACE_DIR/wiki/` 下生成的文件
 
 ### 6.2 同步页面和 vault
@@ -470,8 +479,8 @@ AI 通常会做的事是：
 AI 通常会执行：
 
 ```bash
-node dist/index.js sync
-node dist/index.js vault diff
+wiki sync
+wiki vault diff
 ```
 
 ### 6.3 创建一篇新知识页
@@ -484,8 +493,8 @@ node dist/index.js vault diff
 AI 通常会执行：
 
 ```bash
-node dist/index.js create --type concept --title "贝叶斯定理" --node-id bayes-theorem
-node dist/index.js sync --path concepts/bayes-theorem.md
+wiki create --type concept --title "贝叶斯定理" --node-id bayes-theorem
+wiki sync --path concepts/bayes-theorem.md
 ```
 
 然后 AI 还会去编辑真正的工作区文件：
@@ -503,7 +512,7 @@ $WIKI_PATH/concepts/bayes-theorem.md
 AI 通常会执行：
 
 ```bash
-node dist/index.js find --type concept --status active
+wiki find --type concept --status active
 ```
 
 ### 6.5 全文搜索
@@ -515,7 +524,7 @@ node dist/index.js find --type concept --status active
 AI 通常会执行：
 
 ```bash
-node dist/index.js fts "贝叶斯"
+wiki fts "贝叶斯"
 ```
 
 ### 6.6 语义搜索
@@ -527,7 +536,7 @@ node dist/index.js fts "贝叶斯"
 AI 通常会执行：
 
 ```bash
-node dist/index.js search "优化算法的收敛条件"
+wiki search "优化算法的收敛条件"
 ```
 
 前提是 embedding 环境变量已经配置好。
@@ -541,7 +550,7 @@ node dist/index.js search "优化算法的收敛条件"
 AI 通常会执行：
 
 ```bash
-node dist/index.js graph bayes-theorem --depth 2
+wiki graph bayes-theorem --depth 2
 ```
 
 ## 7. 最容易搞错的路径语义
@@ -589,7 +598,7 @@ $WORKSPACE_DIR/wiki/pages
 例如：
 
 ```bash
-node dist/index.js sync --path concepts/bayes-theorem.md
+wiki sync --path concepts/bayes-theorem.md
 ```
 
 它对应的真实文件是：
@@ -607,7 +616,7 @@ $WIKI_PATH/concepts/bayes-theorem.md
 例如：
 
 ```bash
-node dist/index.js create --type concept --title "贝叶斯定理" --node-id bayes-theorem
+wiki create --type concept --title "贝叶斯定理" --node-id bayes-theorem
 ```
 
 它创建的是工作区里的真实页面，例如：
@@ -636,8 +645,8 @@ $CODEX_HOME/skills/wiki-skill/assets/templates/concept.md
 下面这类导出命令：
 
 ```bash
-node dist/index.js export-index --output wiki/index.md
-node dist/index.js export-graph --output graph.json
+wiki export-index --output wiki/index.md
+wiki export-graph --output graph.json
 ```
 
 它们的 `--output` 如果写相对路径，是相对于 **当前 shell 目录** 解析的。
@@ -651,7 +660,7 @@ cd $CODEX_HOME/skills/wiki-skill
 那么：
 
 ```bash
-node dist/index.js export-index --output wiki/index.md
+wiki export-index --output wiki/index.md
 ```
 
 最终写到的就是：
@@ -669,7 +678,7 @@ $WORKSPACE_DIR/wiki/index.md
 所以，只要你是让 AI 导出文件，最安全的写法永远是：
 
 ```bash
-node dist/index.js export-index --output "$WORKSPACE_DIR/wiki/index.md"
+wiki export-index --output "$WORKSPACE_DIR/wiki/index.md"
 ```
 
 也就是直接给绝对路径。
@@ -728,8 +737,8 @@ export WIKI_SYNC_INTERVAL=86400
 
 ```bash
 cd "$INSTALLED_SKILL_DIR"
-node dist/index.js check-config
-node dist/index.js init
+wiki check-config
+wiki init
 ```
 
 ### 8.7 你应该看到的结果
@@ -824,13 +833,17 @@ $CODEX_HOME/skills/wiki-skill
 
 运行。
 
-### 错误 3：只写了 `.env`，但没有让 Codex 进程读取到环境变量
+### 错误 3：写了配置文件，但没有写成 `wiki-skill` 会自动发现的格式
 
 错。
 
-`wiki-skill` 看的是 `process.env`。
+`wiki-skill` 看的是：
 
-如果 Codex 启动时没有拿到这些环境变量，AI 就会报配置错误。
+- `process.env`
+- 显式指定的 `WIKI_ENV_FILE`
+- 自动发现的 `.wiki.env`
+
+如果你只是随手写了一个普通 `.env`，但没有 export，也没有让 CLI 自动发现到 `.wiki.env`，AI 仍然会报配置错误。
 
 ### 错误 4：把 `WIKI_PATH` 写成了 `.../wiki`
 
