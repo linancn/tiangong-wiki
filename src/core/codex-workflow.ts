@@ -241,25 +241,42 @@ export class FakeCodexWorkflowRunner implements CodexWorkflowRunner {
   }
 }
 
-function createSkipOnlyTestWorkflowRunner(): CodexWorkflowRunner {
-  return new FakeCodexWorkflowRunner(({ threadId }) => ({
-    status: "skipped",
-    decision: "skip",
-    reason: "Skipped by WIKI_TEST_FAKE_WORKFLOW_MODE=skip.",
-    threadId,
-    skillsUsed: ["wiki-skill"],
-    createdPageIds: [],
-    updatedPageIds: [],
-    appliedTypeNames: [],
-    proposedTypes: [],
-    actions: [],
-    lint: [],
-  }));
+async function delay(ms: number): Promise<void> {
+  if (ms <= 0) {
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createSkipOnlyTestWorkflowRunner(options: { delayMs?: number; mode: string }): CodexWorkflowRunner {
+  const delayMs = Math.max(0, options.delayMs ?? 0);
+
+  return new FakeCodexWorkflowRunner(async ({ threadId }) => {
+    await delay(delayMs);
+    return {
+      status: "skipped",
+      decision: "skip",
+      reason: `Skipped by WIKI_TEST_FAKE_WORKFLOW_MODE=${options.mode}.`,
+      threadId,
+      skillsUsed: ["wiki-skill"],
+      createdPageIds: [],
+      updatedPageIds: [],
+      appliedTypeNames: [],
+      proposedTypes: [],
+      actions: [],
+      lint: [],
+    };
+  });
 }
 
 export function createDefaultWorkflowRunner(env: NodeJS.ProcessEnv = process.env): CodexWorkflowRunner {
   if (env.WIKI_TEST_FAKE_WORKFLOW_MODE === "skip") {
-    return createSkipOnlyTestWorkflowRunner();
+    return createSkipOnlyTestWorkflowRunner({ mode: "skip" });
+  }
+
+  if (env.WIKI_TEST_FAKE_WORKFLOW_MODE === "delay-skip") {
+    const delayMs = Number.parseInt(env.WIKI_TEST_FAKE_WORKFLOW_DELAY_MS ?? "0", 10) || 0;
+    return createSkipOnlyTestWorkflowRunner({ delayMs, mode: "delay-skip" });
   }
 
   return new CodexSdkWorkflowRunner();

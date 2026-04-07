@@ -253,12 +253,38 @@ export async function runDaemonServer(options: {
       logInfo(
         `${task}: sync ok mode=${syncResult.mode} inserted=${syncResult.inserted} updated=${syncResult.updated} deleted=${syncResult.deleted} vaultChanges=${syncResult.vault.changes}`,
       );
-      const queueResult = await processVaultQueueBatch(env, {
-        log: (message) => logInfo(`queue ${message}`),
-      });
+      const queueResult = {
+        enabled: false,
+        processed: 0,
+        done: 0,
+        skipped: 0,
+        errored: 0,
+        batches: 0,
+      };
+
+      while (!stopping) {
+        const batchResult = await processVaultQueueBatch(env, {
+          log: (message) => logInfo(`queue ${message}`),
+        });
+        if (!batchResult.enabled) {
+          break;
+        }
+
+        queueResult.enabled = true;
+        if (batchResult.processed === 0) {
+          break;
+        }
+
+        queueResult.processed += batchResult.processed;
+        queueResult.done += batchResult.done;
+        queueResult.skipped += batchResult.skipped;
+        queueResult.errored += batchResult.errored;
+        queueResult.batches += 1;
+      }
+
       if (queueResult.enabled) {
         logInfo(
-          `${task}: queue summary processed=${queueResult.processed} done=${queueResult.done} skipped=${queueResult.skipped} errored=${queueResult.errored}`,
+          `${task}: queue summary processed=${queueResult.processed} done=${queueResult.done} skipped=${queueResult.skipped} errored=${queueResult.errored} batches=${queueResult.batches}`,
         );
       }
       return {

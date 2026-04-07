@@ -16,6 +16,7 @@ import {
   runCli,
   runCliJson,
   waitFor,
+  writeVaultFile,
   type Workspace,
 } from "../helpers.js";
 
@@ -191,6 +192,16 @@ async function startIdleProcess(): Promise<ChildProcess> {
   });
   await waitFor(() => child.pid !== undefined);
   return child;
+}
+
+function daemonQueueEnv(extraEnv: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  return {
+    WIKI_AGENT_ENABLED: "true",
+    WIKI_AGENT_API_KEY: "test-agent-key",
+    WIKI_AGENT_MODEL: "gpt-5.4",
+    WIKI_AGENT_BACKEND: "codex-workflow",
+    ...extraEnv,
+  };
 }
 
 describe("daemon HTTP server integration", () => {
@@ -445,6 +456,88 @@ describe("daemon HTTP server integration", () => {
     expect(graphFile.output).toBe(graphPath);
     expect(graphFile.nodes).toBeGreaterThan(0);
     expect(readFile(graphPath)).toContain("launch-brief");
+  });
+
+  it("drains all pending queue batches in a single cycle and logs aggregate totals", async () => {
+    const workspace = createWorkspace(
+      daemonQueueEnv({
+        WIKI_AGENT_BATCH_SIZE: "2",
+        WIKI_SYNC_INTERVAL: "86400",
+        WIKI_TEST_FAKE_WORKFLOW_MODE: "skip",
+      }),
+    );
+    workspaces.push(workspace);
+
+    writeVaultFile(workspace, "imports/batch-1.pdf", "Batch file one.");
+    writeVaultFile(workspace, "imports/batch-2.docx", "Batch file two.");
+    writeVaultFile(workspace, "imports/batch-3.pptx", "Batch file three.");
+    writeVaultFile(workspace, "imports/batch-4.xlsx", "Batch file four.");
+    writeVaultFile(workspace, "imports/batch-5.md", "# Batch file five");
+    runCli(["init"], workspace.env);
+
+    const daemon = await startForegroundDaemon(workspace);
+    foregroundDaemons.push(daemon);
+
+    await waitFor(() => {
+      const status = runCliJson<DaemonStatusPayload>(["daemon", "status", "--format", "json"], workspace.env);
+      if (!status.running || status.currentTask !== "idle" || status.state?.lastRunAt === null) {
+        return false;
+      }
+
+      const queue = runCliJson<{ totalPending: number; totalSkipped: number }>(["vault", "queue"], workspace.env);
+      return queue.totalPending === 0 && queue.totalSkipped === 5;
+    });
+
+    const queue = runCliJson<{
+      totalPending: number;
+      totalSkipped: number;
+      items: Array<{ fileId: string; status: string }>;
+    }>(["vault", "queue"], workspace.env);
+    expect(queue.totalPending).toBe(0);
+    expect(queue.totalSkipped).toBe(5);
+    expect(queue.items.filter((item) => item.status === "skipped")).toHaveLength(5);
+    expect(daemon.logs()).toContain("cycle: queue summary processed=5 done=0 skipped=5 errored=0 batches=3");
+  });
+
+  it("stops after the current queue batch when shutdown is requested mid-cycle", async () => {
+    const workspace = createWorkspace(
+      daemonQueueEnv({
+        WIKI_AGENT_BATCH_SIZE: "1",
+        WIKI_SYNC_INTERVAL: "86400",
+        WIKI_TEST_FAKE_WORKFLOW_MODE: "delay-skip",
+        WIKI_TEST_FAKE_WORKFLOW_DELAY_MS: "300",
+      }),
+    );
+    workspaces.push(workspace);
+
+    writeVaultFile(workspace, "imports/stop-1.pdf", "Stop file one.");
+    writeVaultFile(workspace, "imports/stop-2.docx", "Stop file two.");
+    writeVaultFile(workspace, "imports/stop-3.md", "# Stop file three");
+    runCli(["init"], workspace.env);
+
+    const daemon = await startForegroundDaemon(workspace);
+    foregroundDaemons.push(daemon);
+
+    await waitFor(() => daemon.logs().includes(": start processing"), 5_000, 20);
+
+    const shutdown = await fetchDaemonJson<{ status: string; pid: number }>(workspace, "/shutdown", {
+      method: "POST",
+    });
+    expect(shutdown.status).toBe(200);
+    expect(shutdown.payload.status).toBe("stopping");
+
+    await daemon.waitForExit();
+
+    const queue = runCliJson<{
+      totalPending: number;
+      totalSkipped: number;
+      items: Array<{ fileId: string; status: string }>;
+    }>(["vault", "queue"], workspace.env);
+    expect(queue.totalPending).toBe(2);
+    expect(queue.totalSkipped).toBe(1);
+    expect(queue.items.filter((item) => item.status === "skipped")).toHaveLength(1);
+    expect(queue.items.filter((item) => item.status === "pending")).toHaveLength(2);
+    expect(daemon.logs()).toContain("cycle: queue summary processed=1 done=0 skipped=1 errored=0 batches=1");
   });
 
   it("fails fast when daemon start cannot bind the configured port", async () => {
