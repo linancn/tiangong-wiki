@@ -25,7 +25,7 @@ import {
   showTemplate,
   showType,
 } from "../operations/type-template.js";
-import { createPage, runSync } from "../operations/write.js";
+import { createPage, runSync, runSyncCommand } from "../operations/write.js";
 import type { DaemonLaunchMode, DaemonState, DaemonTask } from "../types/page.js";
 import { AppError, asAppError } from "../utils/errors.js";
 import { addSeconds, toOffsetIso } from "../utils/time.js";
@@ -334,10 +334,12 @@ export async function runDaemonServer(options: {
               ? String(body.targetPaths[0])
               : undefined;
         const result = await runWriteTask("sync", async () =>
-          runSync(env, {
+          runSyncCommand(env, {
             targetPaths: pathValue ? [pathValue] : undefined,
             force: body.force === true,
             skipEmbedding: body.skipEmbedding === true,
+            process: body.process === true,
+            vaultFileId: typeof body.vaultFileId === "string" && body.vaultFileId.trim() ? body.vaultFileId.trim() : undefined,
           }),
         );
         writeJsonResponse(response, 200, result);

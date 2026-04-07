@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 import { executeServerBackedOperation, requestDaemonJson } from "../daemon/client.js";
-import { runSync } from "../operations/write.js";
+import { runSyncCommand, type SyncCommandResult } from "../operations/write.js";
 import { writeJson } from "../utils/output.js";
 
 export function registerSyncCommand(program: Command): void {
@@ -11,17 +11,21 @@ export function registerSyncCommand(program: Command): void {
     .option("--path <pagePath>", "Only sync a single wiki page")
     .option("--force", "Force a full rebuild of the index")
     .option("--skip-embedding", "Skip embedding generation")
+    .option("--process", "Process vault queue items after sync")
+    .option("--vault-file <fileId>", "Only process one vault queue file_id (relative to VAULT_PATH)")
     .action(async (options) => {
-      const result = await executeServerBackedOperation({
+      const result = await executeServerBackedOperation<SyncCommandResult>({
         kind: "write",
         local: () =>
-          runSync(process.env, {
+          runSyncCommand(process.env, {
             targetPaths: options.path ? [options.path] : undefined,
             force: options.force === true,
             skipEmbedding: options.skipEmbedding === true,
+            process: options.process === true,
+            vaultFileId: options.vaultFile ?? undefined,
           }),
         remote: (endpoint) =>
-          requestDaemonJson({
+          requestDaemonJson<SyncCommandResult>({
             endpoint,
             method: "POST",
             path: "/sync",
@@ -29,6 +33,8 @@ export function registerSyncCommand(program: Command): void {
               path: options.path ?? undefined,
               force: options.force === true,
               skipEmbedding: options.skipEmbedding === true,
+              process: options.process === true,
+              vaultFileId: options.vaultFile ?? undefined,
             },
           }),
       });

@@ -240,3 +240,27 @@ export class FakeCodexWorkflowRunner implements CodexWorkflowRunner {
     return readWorkflowResult(input.resultPath);
   }
 }
+
+function createSkipOnlyTestWorkflowRunner(): CodexWorkflowRunner {
+  return new FakeCodexWorkflowRunner(({ threadId }) => ({
+    status: "skipped",
+    decision: "skip",
+    reason: "Skipped by WIKI_TEST_FAKE_WORKFLOW_MODE=skip.",
+    threadId,
+    skillsUsed: ["wiki-skill"],
+    createdPageIds: [],
+    updatedPageIds: [],
+    appliedTypeNames: [],
+    proposedTypes: [],
+    actions: [],
+    lint: [],
+  }));
+}
+
+export function createDefaultWorkflowRunner(env: NodeJS.ProcessEnv = process.env): CodexWorkflowRunner {
+  if (env.WIKI_TEST_FAKE_WORKFLOW_MODE === "skip") {
+    return createSkipOnlyTestWorkflowRunner();
+  }
+
+  return new CodexSdkWorkflowRunner();
+}

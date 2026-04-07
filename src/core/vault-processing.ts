@@ -3,7 +3,7 @@ import path from "node:path";
 
 import {
   CODEX_WORKFLOW_VERSION,
-  CodexSdkWorkflowRunner,
+  createDefaultWorkflowRunner,
   type CodexWorkflowInput,
   type CodexWorkflowRunner,
 } from "./codex-workflow.js";
@@ -23,7 +23,7 @@ import { AppError } from "../utils/errors.js";
 import { readTextFileSync } from "../utils/fs.js";
 import { toOffsetIso } from "../utils/time.js";
 
-interface QueueProcessResult {
+export interface QueueProcessResult {
   enabled: boolean;
   processed: number;
   done: number;
@@ -45,6 +45,17 @@ interface QueueProcessResult {
 }
 
 const INLINE_WORKFLOW_ATTEMPTS = 2;
+
+function buildFileIdFilterClause(filterFileIds: string[] | undefined): { clause: string; params: string[] } {
+  if (!filterFileIds || filterFileIds.length === 0) {
+    return { clause: "", params: [] };
+  }
+
+  return {
+    clause: ` AND vault_processing_queue.file_id IN (${filterFileIds.map(() => "?").join(", ")})`,
+    params: filterFileIds,
+  };
+}
 
 function parseOptionalStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -101,7 +112,9 @@ function mapQueueRow(row: Record<string, unknown>): VaultQueueItem {
 function claimQueueItems(
   db: Database.Database,
   limit: number,
+  filterFileIds?: string[],
 ): VaultQueueItem[] {
+  const filter = buildFileIdFilterClause(filterFileIds);
   const select = db.prepare(
     `
       SELECT
@@ -131,7 +144,7 @@ function claimQueueItems(
         vault_files.file_path AS filePath
       FROM vault_processing_queue
       LEFT JOIN vault_files ON vault_files.id = vault_processing_queue.file_id
-      WHERE status IN ('pending', 'error')
+      WHERE status IN ('pending', 'error')${filter.clause}
       ORDER BY priority DESC, queued_at ASC
       LIMIT ?
     `,
@@ -144,13 +157,13 @@ function claimQueueItems(
     `,
   );
 
-  return db.transaction((claimLimit: number) => {
-    const items = (select.all(claimLimit) as Array<Record<string, unknown>>).map(mapQueueRow);
+  return db.transaction((claimLimit: number, claimFilterParams: string[]) => {
+    const items = (select.all(...claimFilterParams, claimLimit) as Array<Record<string, unknown>>).map(mapQueueRow);
     for (const item of items) {
       markProcessing.run(item.fileId);
     }
     return items;
-  })(limit);
+  })(limit, filter.params);
 }
 
 function fetchQueueItemsByStatus(
@@ -191,6 +204,46 @@ function fetchQueueItemsByStatus(
     `,
   ).all(...(status ? [status] : [])) as Array<Record<string, unknown>>;
   return rows.map(mapQueueRow);
+}
+
+function fetchQueueItemByFileId(
+  db: Database.Database,
+  fileId: string,
+): VaultQueueItem | null {
+  const row = db.prepare(
+    `
+      SELECT
+        file_id AS fileId,
+        status,
+        priority,
+        queued_at AS queuedAt,
+        processed_at AS processedAt,
+        result_page_id AS resultPageId,
+        error_message AS errorMessage,
+        attempts,
+        thread_id AS threadId,
+        workflow_version AS workflowVersion,
+        decision,
+        result_manifest_path AS resultManifestPath,
+        last_error_at AS lastErrorAt,
+        retry_after AS retryAfter,
+        created_page_ids AS createdPageIds,
+        updated_page_ids AS updatedPageIds,
+        applied_type_names AS appliedTypeNames,
+        proposed_type_names AS proposedTypeNames,
+        skills_used AS skillsUsed,
+        vault_files.file_name AS fileName,
+        vault_files.file_ext AS fileExt,
+        vault_files.source_type AS sourceType,
+        vault_files.file_size AS fileSize,
+        vault_files.file_path AS filePath
+      FROM vault_processing_queue
+      LEFT JOIN vault_files ON vault_files.id = vault_processing_queue.file_id
+      WHERE vault_processing_queue.file_id = ?
+    `,
+  ).get(fileId) as Record<string, unknown> | undefined;
+
+  return row ? mapQueueRow(row) : null;
 }
 
 function fetchVaultFile(db: Database.Database, fileId: string): VaultFile | null {
@@ -603,12 +656,28 @@ export function getVaultQueueSnapshot(
   }
 }
 
+export function getVaultQueueItem(
+  env: NodeJS.ProcessEnv = process.env,
+  fileId: string,
+): VaultQueueItem | null {
+  const paths = resolveRuntimePaths(env);
+  const config = loadConfig(paths.configPath);
+  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384);
+
+  try {
+    return fetchQueueItemByFileId(db, fileId);
+  } finally {
+    db.close();
+  }
+}
+
 export async function processVaultQueueBatch(
   env: NodeJS.ProcessEnv = process.env,
   options: {
     maxItems?: number;
     log?: (message: string) => void;
     workflowRunner?: CodexWorkflowRunner;
+    filterFileIds?: string[];
   } = {},
 ): Promise<QueueProcessResult> {
   const agentSettings = resolveAgentSettings(env, { strict: true });
@@ -628,7 +697,7 @@ export async function processVaultQueueBatch(
   const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384);
 
   try {
-    const items = claimQueueItems(db, options.maxItems ?? agentSettings.batchSize);
+    const items = claimQueueItems(db, options.maxItems ?? agentSettings.batchSize, options.filterFileIds);
     const result: QueueProcessResult = {
       enabled: true,
       processed: 0,
@@ -637,7 +706,7 @@ export async function processVaultQueueBatch(
       errored: 0,
       items: [],
     };
-    const workflowRunner = options.workflowRunner ?? new CodexSdkWorkflowRunner();
+    const workflowRunner = options.workflowRunner ?? createDefaultWorkflowRunner(env);
     const templateEvolution = resolveTemplateEvolutionSettings(env);
     const maxWorkflowAttempts = isInlineRetryCapable(workflowRunner) ? INLINE_WORKFLOW_ATTEMPTS : 1;
     const workflowTimeoutMs = agentSettings.workflowTimeoutSeconds * 1000;
