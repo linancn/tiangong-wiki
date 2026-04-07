@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Skill"
+  short_description: "Query, route, and maintain local wiki knowledge"
+  default_prompt: "Use $wiki-skill to inspect existing wiki knowledge, discover the current ontology, and create or update durable pages in the local workspace."

@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "customColumns": {},
+  "defaultSummaryFields": [
+    "title",
+    "tags"
+  ],
+  "commonEdges": {
+    "relatedPages": {
+      "edgeType": "related",
+      "resolve": "path"
+    },
+    "sourceRefs": {
+      "edgeType": "sourced_from",
+      "resolve": "path",
+      "match": "\\.md$"
+    }
+  },
+  "templates": {
+    "concept": {
+      "file": "templates/concept.md",
+      "columns": {
+        "confidence": "text",
+        "masteryLevel": "text"
+      },
+      "edges": {
+        "prerequisites": {
+          "edgeType": "prerequisite",
+          "resolve": "nodeId"
+        }
+      },
+      "summaryFields": [
+        "confidence",
+        "masteryLevel",
+        "prerequisites"
+      ]
+    },
+    "misconception": {
+      "file": "templates/misconception.md",
+      "columns": {
+        "severity": "text",
+        "resolvedAt": "text"
+      },
+      "edges": {
+        "correctedConcepts": {
+          "edgeType": "corrects",
+          "resolve": "nodeId"
+        }
+      },
+      "summaryFields": [
+        "severity",
+        "correctedConcepts"
+      ]
+    },
+    "bridge": {
+      "file": "templates/bridge.md",
+      "columns": {
+        "fromCourse": "text",
+        "toCourse": "text",
+        "transferType": "text"
+      },
+      "edges": {
+        "fromConcepts": {
+          "edgeType": "bridges_from",
+          "resolve": "nodeId"
+        },
+        "toConcepts": {
+          "edgeType": "bridges_to",
+          "resolve": "nodeId"
+        }
+      },
+      "summaryFields": [
+        "fromCourse",
+        "toCourse",
+        "transferType"
+      ]
+    },
+    "source-summary": {
+      "file": "templates/source-summary.md",
+      "columns": {
+        "sourceType": "text",
+        "vaultPath": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "sourceType",
+        "keyFindings"
+      ]
+    },
+    "lesson": {
+      "file": "templates/lesson.md",
+      "columns": {
+        "context": "text",
+        "severity": "text",
+        "actionable": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "context",
+        "severity"
+      ]
+    },
+    "method": {
+      "file": "templates/method.md",
+      "columns": {
+        "domain": "text",
+        "effectiveness": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "domain",
+        "applicableTo",
+        "effectiveness"
+      ]
+    },
+    "person": {
+      "file": "templates/person.md",
+      "columns": {
+        "role": "text",
+        "context": "text",
+        "contact": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "role",
+        "context",
+        "contact"
+      ]
+    },
+    "achievement": {
+      "file": "templates/achievement.md",
+      "columns": {
+        "achievementType": "text",
+        "date": "text",
+        "issuer": "text",
+        "verifiable": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "achievementType",
+        "date",
+        "issuer",
+        "verifiable"
+      ]
+    },
+    "resume": {
+      "file": "templates/resume.md",
+      "columns": {
+        "targetAudience": "text",
+        "lastReviewedAt": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "targetAudience",
+        "lastReviewedAt"
+      ]
+    },
+    "research-note": {
+      "file": "templates/research-note.md",
+      "columns": {
+        "researchTopic": "text",
+        "stage": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "researchTopic",
+        "stage"
+      ]
+    },
+    "faq": {
+      "file": "templates/faq.md",
+      "columns": {
+        "frequency": "text"
+      },
+      "edges": {},
+      "summaryFields": [
+        "frequency"
+      ]
+    }
+  }
+}

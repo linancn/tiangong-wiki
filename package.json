@@ -1,0 +1,41 @@
+{
+  "name": "@tiangong/wiki-skill",
+  "version": "0.1.0",
+  "description": "Local-first wiki index and query engine for Markdown knowledge pages.",
+  "type": "module",
+  "bin": {
+    "wiki": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "assets",
+    "references",
+    "agents",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist node_modules/.vitest",
+    "dev": "tsx src/index.ts",
+    "test": "npm run build && vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "^0.118.0",
+    "better-sqlite3": "^12.8.0",
+    "commander": "^14.0.3",
+    "gray-matter": "^4.0.3",
+    "sqlite-vec": "^0.1.9"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.5.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}
