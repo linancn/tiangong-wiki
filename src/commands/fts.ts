@@ -5,6 +5,7 @@ import { compactPageSummary } from "../core/presenters.js";
 import { listPageColumns, mapPageRow } from "../core/query.js";
 import { AppError } from "../utils/errors.js";
 import { writeJson } from "../utils/output.js";
+import { normalizeFtsQuery } from "../utils/segmenter.js";
 
 export function registerFtsCommand(program: Command): void {
   program
@@ -20,6 +21,7 @@ export function registerFtsCommand(program: Command): void {
         if (!Number.isFinite(limit) || limit <= 0) {
           throw new AppError(`Invalid --limit value: ${options.limit}`, "config");
         }
+        const normalizedQuery = normalizeFtsQuery(query);
 
         const rows = db
           .prepare(
@@ -33,7 +35,7 @@ export function registerFtsCommand(program: Command): void {
               LIMIT ?
             `,
           )
-          .all(...(options.type ? [query, options.type, limit] : [query, limit])) as Array<
+          .all(...(options.type ? [normalizedQuery, options.type, limit] : [normalizedQuery, limit])) as Array<
           Record<string, unknown>
         >;
 

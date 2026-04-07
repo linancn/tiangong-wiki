@@ -3,8 +3,10 @@ import * as sqliteVec from "sqlite-vec";
 
 import type { LoadedWikiConfig } from "../types/config.js";
 import { AppError } from "../utils/errors.js";
+import { segmentForFts } from "../utils/segmenter.js";
 
 export const SCHEMA_VERSION = "1";
+const FTS_INDEX_VERSION = "2";
 
 export interface OpenDbResult {
   db: Database.Database;
@@ -16,6 +18,13 @@ function tableExists(db: Database.Database, tableName: string): boolean {
     .prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?")
     .get(tableName) as { name?: string } | undefined;
   return Boolean(row?.name);
+}
+
+function getTableSql(db: Database.Database, tableName: string): string | null {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?")
+    .get(tableName) as { sql?: string } | undefined;
+  return row?.sql ?? null;
 }
 
 function getExistingTableColumns(db: Database.Database, tableName: string): Set<string> {
@@ -34,6 +43,55 @@ function ensureTableColumns(
       db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
     }
   }
+}
+
+function createFtsTable(db: Database.Database): void {
+  db.exec(`
+    CREATE VIRTUAL TABLE pages_fts USING fts5(
+      title,
+      tags,
+      summary_text
+    );
+  `);
+}
+
+function normalizeTagsForFts(rawTags: string | null): string {
+  if (!rawTags) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(rawTags) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+        .join(" ");
+    }
+  } catch {
+    // Fall back to the stored value if legacy data is not valid JSON.
+  }
+
+  return rawTags;
+}
+
+function buildFtsRow(row: {
+  rowid: number;
+  title: string;
+  tags: string | null;
+  summaryText: string | null;
+}): { rowid: number; title: string; tags: string; summary_text: string } {
+  return {
+    rowid: row.rowid,
+    title: segmentForFts(row.title),
+    tags: segmentForFts(normalizeTagsForFts(row.tags)),
+    summary_text: segmentForFts(row.summaryText ?? ""),
+  };
+}
+
+function isLegacyExternalContentFts(db: Database.Database): boolean {
+  const sql = getTableSql(db, "pages_fts");
+  return typeof sql === "string" && /content\s*=\s*'pages'/i.test(sql);
 }
 
 function ensureBaseTables(db: Database.Database, embeddingDimensions: number): void {
@@ -132,18 +190,6 @@ function ensureBaseTables(db: Database.Database, embeddingDimensions: number): v
     skills_used: "TEXT",
   });
 
-  if (!tableExists(db, "pages_fts")) {
-    db.exec(`
-      CREATE VIRTUAL TABLE pages_fts USING fts5(
-        title,
-        tags,
-        summary_text,
-        content='pages',
-        content_rowid='rowid'
-      );
-    `);
-  }
-
   if (!tableExists(db, "vec_pages")) {
     db.exec(`
       CREATE VIRTUAL TABLE vec_pages USING vec0(
@@ -202,7 +248,51 @@ export function setMetaValues(db: Database.Database, values: Record<string, stri
 }
 
 export function rebuildFts(db: Database.Database): void {
-  db.prepare("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')").run();
+  if (!tableExists(db, "pages_fts")) {
+    return;
+  }
+
+  const rows = db.prepare(
+    "SELECT rowid, title, tags, summary_text AS summaryText FROM pages ORDER BY rowid",
+  ).all() as Array<{
+    rowid: number;
+    title: string;
+    tags: string | null;
+    summaryText: string | null;
+  }>;
+  const clearStatement = db.prepare("DELETE FROM pages_fts");
+  const insertStatement = db.prepare(
+    "INSERT INTO pages_fts(rowid, title, tags, summary_text) VALUES (@rowid, @title, @tags, @summary_text)",
+  );
+
+  const transaction = db.transaction(() => {
+    clearStatement.run();
+    for (const row of rows) {
+      insertStatement.run(buildFtsRow(row));
+    }
+  });
+
+  transaction();
+}
+
+function ensureFtsTable(db: Database.Database): void {
+  const hasTable = tableExists(db, "pages_fts");
+  const storedFtsIndexVersion = getMeta(db, "fts_index_version");
+  const needsRecreate = !hasTable || isLegacyExternalContentFts(db);
+  const needsRebuild = needsRecreate || storedFtsIndexVersion !== FTS_INDEX_VERSION;
+
+  if (needsRecreate && hasTable) {
+    db.exec("DROP TABLE pages_fts");
+  }
+  if (needsRecreate) {
+    createFtsTable(db);
+  }
+  if (needsRebuild) {
+    rebuildFts(db);
+  }
+  if (needsRebuild || storedFtsIndexVersion !== FTS_INDEX_VERSION) {
+    setMeta(db, "fts_index_version", FTS_INDEX_VERSION);
+  }
 }
 
 export function resetVectorTable(db: Database.Database, embeddingDimensions: number): void {
@@ -246,6 +336,7 @@ export function openDb(
   sqliteVec.load(db);
 
   ensureBaseTables(db, embeddingDimensions);
+  ensureFtsTable(db);
 
   const storedSchemaVersion = getMeta(db, "schema_version");
   if (storedSchemaVersion && storedSchemaVersion !== SCHEMA_VERSION) {

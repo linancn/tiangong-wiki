@@ -251,6 +251,7 @@ export function applyChanges(
   const updated: string[] = [];
   const deleted: string[] = [];
   const summaryChangedIds: string[] = [];
+  const hasContentChanges = parsedEntries.length > 0 || changes.deleted.length > 0;
 
   const transaction = db.transaction(() => {
     for (const { entry, parsed } of parsedEntries) {
@@ -301,7 +302,9 @@ export function applyChanges(
       deleted.push(page.id);
     }
 
-    rebuildFts(db);
+    if (hasContentChanges) {
+      rebuildFts(db);
+    }
   });
 
   transaction();
