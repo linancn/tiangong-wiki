@@ -2,19 +2,21 @@
 
 [English](./README.md)
 
-[LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 模式的实现 —— 不再每次从原始文档重新推导答案（如 RAG），而是让 LLM **增量构建并维护一个持久化的 wiki**：一个结构化、互相链接的 Markdown 页面集合，随着使用不断丰富。你负责添加素材、提出问题、探索知识；AI 负责摘要、交叉引用和日常维护。
+> 受 Karpathy 的 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 启发 —— 不再像 RAG 那样每次从原始文档重新推导答案，而是让 LLM **构建并维护一个持久化的 wiki**，知识随使用不断积累。
 
-`@biaoo/wiki` 为这个模式提供基础设施：一个 CLI 和索引引擎，将 Markdown 文件目录变为可查询的知识库，支持全文搜索、语义搜索和知识图谱。
+`@biaoo/wiki` 为这个模式提供基础设施：一个 CLI，将 Markdown 文件目录变为可查询的知识库，支持全文搜索、语义搜索、知识图谱和交互式仪表盘。
 
 ## 特性
 
-- **知识持续积累** — 每添加一个素材、每提出一个问题，wiki 都会变得更丰富；知识编译一次并持续更新，而非每次查询重新推导
-- **你的文件，你的数据** — 纯 Markdown 页面，你完全拥有和控制；无需云端、无需数据库服务、无供应商锁定
-- **随时找到任何知识** — 按元数据、关键词或自然语言语义搜索整个知识库
-- **看见知识之间的关联** — 自动从页面中提取关系，构建可导航的知识图谱
-- **摄入原始素材** — 将 PDF、文档、笔记放入 vault，AI 自动阅读并转化为结构化的 wiki 页面
-- **内置 AI Agent** — 作为 [Codex / Claude Code Skill](./SKILL.md) 使用，让 Agent 代你查询、创建和维护知识
-- **可视化仪表盘** — 通过交互式 Web 界面探索知识图谱、浏览页面、搜索内容
+| | |
+|---|---|
+| **知识持续积累** | 每添加一个素材、每提出一个问题，wiki 都变得更丰富 —— 编译一次，持续更新 |
+| **你的文件，你的数据** | 纯 Markdown，你完全拥有；无需云端、无需数据库服务、无锁定 |
+| **随时找到任何知识** | 元数据过滤、关键词搜索、语义搜索，一个 CLI 搞定 |
+| **看见知识关联** | 自动提取页面间关系，构建可导航的知识图谱 |
+| **摄入原始素材** | 将文件放入 vault，AI 自动阅读并转化为结构化页面 |
+| **AI Agent 原生** | 作为 [Codex / Claude Code Skill](./SKILL.md) 使用，支持自主知识工作 |
+| **可视化仪表盘** | 通过 Web 界面浏览图谱、查看页面、搜索内容 |
 
 ## 安装
 
@@ -22,72 +24,49 @@
 npm install -g @biaoo/wiki
 ```
 
-需要 Node.js >= 18。
+<details>
+<summary><strong>作为 AI Agent Skill 使用</strong></summary>
 
-### 作为 AI Agent Skill 使用
-
-`@biaoo/wiki` 同时也是 Codex 和 Claude Code 的 [Agent Skill](./SKILL.md)。安装 npm 包后，将其注册到你的 Agent：
+安装 npm 包后，将其注册到你的 Agent：
 
 ```bash
-# Codex
-npx skills add Biaoo/wiki -a codex
-
-# Claude Code
-npx skills add Biaoo/wiki -a claude-code
-
-# 全局安装（跨项目可用）
-npx skills add Biaoo/wiki -a codex -g
+npx skills add Biaoo/wiki -a codex          # Codex
+npx skills add Biaoo/wiki -a claude-code    # Claude Code
+npx skills add Biaoo/wiki -a codex -g       # 全局安装（跨项目可用）
 ```
 
-也可以使用内置的配置向导，一步完成 npm 安装和 skill 注册：
+或使用配置向导一步完成：
 
 ```bash
 wiki setup
 ```
+
+</details>
 
 ## 快速开始
 
-`wiki setup` 会交互式创建 `.wiki.env` 文件，包含所有必要的环境变量（`WIKI_PATH`、`VAULT_PATH`、embedding 配置等）。完整变量说明见 [references/env.md](./references/env.md)。
-
 ```bash
-# 交互式配置向导 — 创建 .wiki.env 配置文件并初始化工作区
-wiki setup
-
-# 验证配置
-wiki doctor
-
-# 初始化工作区（创建目录、配置、模板）
-wiki init
-
-# 索引你的 Markdown 文件
-wiki sync
-
-# 查询
-wiki find --type concept --status active
-wiki fts "贝叶斯"
-wiki search "优化算法的收敛条件"    # 需要配置 embedding
-wiki graph bayes-theorem --depth 2
+wiki setup                                   # 交互式配置向导
+wiki doctor                                  # 验证配置
+wiki init                                    # 初始化工作区
+wiki sync                                    # 索引 Markdown 文件
 ```
 
-## 守护进程
-
-守护进程提供本地 HTTP 服务，用于 Web 仪表盘和更快的查询响应。仅监听 `127.0.0.1`。
-
 ```bash
-# 前台运行（推荐配合 pm2、launchd、systemd 等进程管理器）
-wiki daemon run
-
-# 后台运行（便捷方式，启动 detached 子进程）
-wiki daemon start
-
-# 查看状态 / 停止
-wiki daemon status
-wiki daemon stop
+wiki find --type concept --status active     # 结构化查询
+wiki fts "贝叶斯"                             # 全文搜索
+wiki search "优化算法的收敛条件"                # 语义搜索
+wiki graph bayes-theorem --depth 2           # 图遍历
 ```
 
-守护进程运行时，查询命令（`find`、`fts`、`search`、`graph` 等）会自动通过 HTTP 路由以获得更好的性能。如果守护进程不可用，则回退到本地直接执行。
+```bash
+wiki daemon run                              # 启动仪表盘和 HTTP API
+wiki dashboard                               # 在浏览器中打开仪表盘
+```
 
-## CLI 概览
+> 环境变量通过 `.wiki.env` 管理（由 `wiki setup` 创建）。完整参考见 [references/env.md](./references/env.md)。
+
+## CLI
 
 ```
 配置引导      setup · doctor · check-config
@@ -95,13 +74,13 @@ wiki daemon stop
 查询          find · fts · search · graph
 自省          list · page-info · stat · lint
 创建          create · template · type
-Vault        vault list|diff|queue
+Vault        vault list | diff | queue
 导出          export-graph · export-index
-守护进程      daemon run|start|stop|status
+守护进程      daemon run | start | stop | status
 仪表盘        dashboard
 ```
 
-运行 `wiki --help` 或 `wiki <command> --help` 查看用法。完整命令参考见 [references/cli-interface.md](./references/cli-interface.md)。
+完整命令参考见 [references/cli-interface.md](./references/cli-interface.md)。
 
 ## 技术架构
 
@@ -129,7 +108,7 @@ Vault        vault list|diff|queue
 │               Markdown 页面（唯一真实来源）                  │
 │                    wiki/pages/**/*.md                     │
 └────────────────────────┬─────────────────────────────────┘
-                         │ wiki sync — 解析 frontmatter
+                         │ wiki sync
                          ▼
 ┌──────────────────────────────────────────────────────────┐
 │                  SQLite 索引 (index.db)                    │
@@ -142,7 +121,6 @@ Vault        vault list|diff|queue
    │           │           │           │
    ▼           ▼           ▼           ▼
   find        fts       search       graph
-(元数据)     (关键词)    (语义)      (图遍历)
    │           │           │           │
    └───────────┴───────────┴───────────┘
                      │
@@ -152,24 +130,22 @@ Vault        vault list|diff|queue
         ┌────────────┴────────────┐
         ▼                         ▼
    CLI / 脚本              Web 仪表盘
-                         (Preact + G6 图谱)
 ```
 
-**Vault → Pages 流水线** — 原始素材（PDF、文档、笔记）进入 Vault。由 Codex SDK 驱动的 Agentic Workflow 逐个阅读文件，通过 `wiki type list / find / fts` 发现当前知识体系，然后决定是跳过、创建新页面还是更新已有页面。最终产出结构化的 Markdown 页面到 `wiki/pages/`。
+**Vault → Pages** — 原始素材进入 vault，Agentic Workflow 逐个阅读，通过 `wiki type list / find / fts` 发现当前知识体系，决定跳过、创建或更新页面。
 
-**双引擎设计** — Markdown 页面是唯一真实来源，人和 AI Agent 可以直接读写。SQLite 数据库是由 `wiki sync` 构建的衍生索引，提供纯文件无法实现的结构化查询、全文搜索、向量相似度和图谱遍历。
+**双引擎** — Markdown 文件是唯一真实来源，SQLite 是由 `wiki sync` 构建的衍生索引，提供纯文件无法实现的查询能力。
 
-**三级列模型** — 页面元数据使用灵活的列体系：固定列（硬编码 schema）、部署列（`wiki.config.json` 自定义字段，全局生效）、模板列（按 pageType 生效的字段）。Schema 变更通过 `ALTER TABLE` 自动处理，无需手动迁移。
+**灵活 Schema** — 三级列模型（固定列、部署列、模板列），配置变更时自动 `ALTER TABLE`，无需手动迁移。
 
 ## 技术栈
 
-| 组件 | 技术 |
-|------|------|
+| | |
+|---|---|
 | 语言 | TypeScript (ESM) |
 | 运行时 | Node.js >= 18 |
 | CLI 框架 | [Commander.js](https://github.com/tj/commander.js) |
-| 数据库 | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) |
-| 向量检索 | [sqlite-vec](https://github.com/asg017/sqlite-vec) |
+| 数据库 | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) + [sqlite-vec](https://github.com/asg017/sqlite-vec) |
 | 仪表盘 | [Preact](https://preactjs.com/) + [G6](https://g6.antv.antgroup.com/) |
 | 构建 | [Vite](https://vite.dev/) |
 | 测试 | [Vitest](https://vitest.dev/) |
@@ -179,19 +155,13 @@ Vault        vault list|diff|queue
 ```bash
 git clone https://github.com/Biaoo/wiki.git
 cd wiki
-npm install
-npm run build
+npm install && npm run build
 
-# 从源码运行 CLI
-npm run dev -- --help
-
-# 启动仪表盘开发服务器
-npm run dev:dashboard
-
-# 运行测试
-npm test
+npm run dev -- --help        # 从源码运行 CLI
+npm run dev:dashboard        # 仪表盘开发服务器
+npm test                     # 运行测试
 ```
 
-## 许可证
+## 参与贡献
 
-[MIT](./LICENSE)
+欢迎提 Issue 和 Pull Request。如果是较大的改动，请先开 Issue 讨论。

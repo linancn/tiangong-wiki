@@ -2,19 +2,21 @@
 
 [中文](./README.zh-CN.md)
 
-An implementation of the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern — instead of re-deriving answers from raw documents every time (like RAG), the LLM **incrementally builds and maintains a persistent wiki**: a structured, interlinked collection of Markdown pages that compounds over time. You add sources, ask questions, and explore; the AI does the summarizing, cross-referencing, and bookkeeping.
+> Inspired by Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — instead of re-deriving answers from raw documents on every query (like RAG), the LLM **builds and maintains a persistent wiki** that compounds over time.
 
-`@biaoo/wiki` provides the infrastructure for this pattern: a CLI and indexing engine that turns a directory of Markdown files into a queryable knowledge base with full-text search, semantic search, and a knowledge graph.
+`@biaoo/wiki` is the infrastructure for this pattern: a CLI that turns a directory of Markdown files into a queryable knowledge base with full-text search, semantic search, knowledge graph, and an interactive dashboard.
 
 ## Features
 
-- **Knowledge that compounds** — every source you add and every question you ask makes the wiki richer; knowledge is compiled once and kept current, not re-derived on every query
-- **Your files, your data** — plain Markdown pages you own and control; no cloud, no database server, no vendor lock-in
-- **Find anything** — search by metadata, keywords, or natural language meaning across your entire knowledge base
-- **See connections** — automatically maps relationships between pages into a navigable knowledge graph
-- **Ingest raw materials** — drop PDFs, docs, and notes into a vault; AI reads and converts them into structured wiki pages
-- **AI agents included** — ships as a [Codex / Claude Code skill](./SKILL.md) so agents can query, create, and maintain knowledge on your behalf
-- **Visual dashboard** — explore your knowledge graph, browse pages, and search from an interactive web interface
+| | |
+|---|---|
+| **Knowledge that compounds** | Every source and every question makes the wiki richer — compiled once, kept current |
+| **Your files, your data** | Plain Markdown you own; no cloud, no database server, no lock-in |
+| **Find anything** | Metadata filters, keyword search, and semantic search in one CLI |
+| **See connections** | Relationships auto-extracted into a navigable knowledge graph |
+| **Ingest raw materials** | Drop files into a vault; AI reads and converts them to structured pages |
+| **AI-agent native** | Ships as a [Codex / Claude Code skill](./SKILL.md) for autonomous knowledge work |
+| **Visual dashboard** | Browse the graph, inspect pages, and search from a web UI |
 
 ## Install
 
@@ -22,72 +24,49 @@ An implementation of the [LLM Wiki](https://gist.github.com/karpathy/442a6bf5559
 npm install -g @biaoo/wiki
 ```
 
-Requires Node.js >= 18.
+<details>
+<summary><strong>Use as an AI Agent Skill</strong></summary>
 
-### Use as an AI Agent Skill
-
-`@biaoo/wiki` also ships as an [Agent Skill](./SKILL.md) for Codex and Claude Code. After installing the npm package, register it with your agent:
+After installing the npm package, register it with your agent:
 
 ```bash
-# Codex
-npx skills add Biaoo/wiki -a codex
-
-# Claude Code
-npx skills add Biaoo/wiki -a claude-code
-
-# Global install (available across all projects)
-npx skills add Biaoo/wiki -a codex -g
+npx skills add Biaoo/wiki -a codex          # Codex
+npx skills add Biaoo/wiki -a claude-code    # Claude Code
+npx skills add Biaoo/wiki -a codex -g       # Global (cross-project)
 ```
 
-Or use the built-in setup wizard which handles both npm install and skill registration:
+Or let the setup wizard handle everything:
 
 ```bash
 wiki setup
 ```
+
+</details>
 
 ## Quick Start
 
-`wiki setup` will interactively create a `.wiki.env` file with all required environment variables (`WIKI_PATH`, `VAULT_PATH`, embedding config, etc.). See [references/env.md](./references/env.md) for the full variable reference.
-
 ```bash
-# Interactive setup wizard — creates .wiki.env config and initializes workspace
-wiki setup
-
-# Verify configuration
-wiki doctor
-
-# Initialize workspace (create directories, config, templates)
-wiki init
-
-# Index your Markdown pages
-wiki sync
-
-# Query
-wiki find --type concept --status active
-wiki fts "Bayesian"
-wiki search "convergence conditions"    # requires embedding config
-wiki graph bayes-theorem --depth 2
+wiki setup                                   # interactive config wizard
+wiki doctor                                  # verify configuration
+wiki init                                    # initialize workspace
+wiki sync                                    # index Markdown pages
 ```
 
-## Daemon
-
-The daemon provides a local HTTP server for the web dashboard and faster query responses. It listens on `127.0.0.1` only.
-
 ```bash
-# Foreground (recommended for process managers like pm2, launchd, systemd)
-wiki daemon run
-
-# Background (convenience wrapper, spawns a detached process)
-wiki daemon start
-
-# Check status / stop
-wiki daemon status
-wiki daemon stop
+wiki find --type concept --status active     # structured query
+wiki fts "Bayesian"                          # full-text search
+wiki search "convergence conditions"         # semantic search
+wiki graph bayes-theorem --depth 2           # graph traversal
 ```
 
-When the daemon is running, query commands (`find`, `fts`, `search`, `graph`, etc.) automatically route through HTTP for better performance. If the daemon is unavailable, they fall back to direct local execution.
+```bash
+wiki daemon run                              # start dashboard & HTTP API
+wiki dashboard                               # open dashboard in browser
+```
 
-## CLI Overview
+> Environment variables are managed via `.wiki.env` (created by `wiki setup`). See [references/env.md](./references/env.md) for the full reference.
+
+## CLI
 
 ```
 Setup         setup · doctor · check-config
@@ -95,13 +74,13 @@ Indexing      init · sync
 Query         find · fts · search · graph
 Inspect       list · page-info · stat · lint
 Create        create · template · type
-Vault         vault list|diff|queue
+Vault         vault list | diff | queue
 Export        export-graph · export-index
-Daemon        daemon run|start|stop|status
+Daemon        daemon run | start | stop | status
 Dashboard     dashboard
 ```
 
-Run `wiki --help` or `wiki <command> --help` for usage. See [references/cli-interface.md](./references/cli-interface.md) for the full command reference.
+See [references/cli-interface.md](./references/cli-interface.md) for the full command reference.
 
 ## Architecture
 
@@ -129,7 +108,7 @@ Run `wiki --help` or `wiki <command> --help` for usage. See [references/cli-inte
 │                    Markdown Pages (SSOT)                  │
 │                    wiki/pages/**/*.md                     │
 └────────────────────────┬─────────────────────────────────┘
-                         │ wiki sync — parse frontmatter
+                         │ wiki sync
                          ▼
 ┌──────────────────────────────────────────────────────────┐
 │                   SQLite Index (index.db)                 │
@@ -142,7 +121,6 @@ Run `wiki --help` or `wiki <command> --help` for usage. See [references/cli-inte
    │           │           │           │
    ▼           ▼           ▼           ▼
   find        fts       search       graph
-(metadata)  (keyword)  (semantic)  (traversal)
    │           │           │           │
    └───────────┴───────────┴───────────┘
                      │
@@ -152,24 +130,22 @@ Run `wiki --help` or `wiki <command> --help` for usage. See [references/cli-inte
         ┌────────────┴────────────┐
         ▼                         ▼
    CLI / Scripts            Web Dashboard
-                         (Preact + G6 graph)
 ```
 
-**Vault → Pages pipeline** — Raw materials (PDFs, documents, notes) land in the vault. An agentic workflow powered by Codex SDK reads each file, discovers the current ontology via `wiki type list / find / fts`, and decides whether to skip, create a new page, or update an existing one. The result is structured Markdown pages in `wiki/pages/`.
+**Vault → Pages** — Raw materials land in the vault. An agentic workflow reads each file, discovers the current ontology via `wiki type list / find / fts`, and decides whether to skip, create, or update a page.
 
-**Dual-engine design** — Markdown pages are the single source of truth that humans and AI agents read and write directly. The SQLite database is a derived index rebuilt by `wiki sync`, providing structured queries, full-text search, vector similarity, and graph traversal that plain files cannot offer.
+**Dual engine** — Markdown files are the source of truth. SQLite is a derived index rebuilt by `wiki sync`, enabling queries that plain files cannot support.
 
-**Three-tier column model** — Page metadata uses a flexible column system: fixed columns (hardcoded schema), deploy columns (`wiki.config.json` custom fields applied globally), and template columns (per-pageType fields). Schema changes are handled automatically via `ALTER TABLE` — no manual migrations.
+**Flexible schema** — Three-tier column model (fixed, deploy-level, template-level) with automatic `ALTER TABLE` on config changes.
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|------------|
+| | |
+|---|---|
 | Language | TypeScript (ESM) |
 | Runtime | Node.js >= 18 |
 | CLI | [Commander.js](https://github.com/tj/commander.js) |
-| Database | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) |
-| Vector search | [sqlite-vec](https://github.com/asg017/sqlite-vec) |
+| Database | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) + [sqlite-vec](https://github.com/asg017/sqlite-vec) |
 | Dashboard | [Preact](https://preactjs.com/) + [G6](https://g6.antv.antgroup.com/) |
 | Build | [Vite](https://vite.dev/) |
 | Test | [Vitest](https://vitest.dev/) |
@@ -179,19 +155,13 @@ Run `wiki --help` or `wiki <command> --help` for usage. See [references/cli-inte
 ```bash
 git clone https://github.com/Biaoo/wiki.git
 cd wiki
-npm install
-npm run build
+npm install && npm run build
 
-# Run CLI from source
-npm run dev -- --help
-
-# Run dashboard dev server
-npm run dev:dashboard
-
-# Run tests
-npm test
+npm run dev -- --help        # CLI from source
+npm run dev:dashboard        # dashboard dev server
+npm test                     # run tests
 ```
 
-## License
+## Contributing
 
-[MIT](./LICENSE)
+Issues and pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
