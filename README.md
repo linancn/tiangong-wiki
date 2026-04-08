@@ -2,15 +2,19 @@
 
 [中文](./README.zh-CN.md)
 
-A local-first knowledge base engine for Markdown files. It indexes your pages into SQLite and gives you structured queries, full-text search, semantic search, and a knowledge graph — all from a single CLI.
+An implementation of the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern — instead of re-deriving answers from raw documents every time (like RAG), the LLM **incrementally builds and maintains a persistent wiki**: a structured, interlinked collection of Markdown pages that compounds over time. You add sources, ask questions, and explore; the AI does the summarizing, cross-referencing, and bookkeeping.
+
+`@biaoo/wiki` provides the infrastructure for this pattern: a CLI and indexing engine that turns a directory of Markdown files into a queryable knowledge base with full-text search, semantic search, and a knowledge graph.
 
 ## Features
 
-- **Markdown as source of truth** — your `.md` files are the canonical data; the database is a derived index
-- **SQLite-powered** — FTS5 full-text search, [sqlite-vec](https://github.com/asg017/sqlite-vec) vector search, and graph traversal in one embedded database
-- **Knowledge graph** — edges extracted from frontmatter `related_pages`, visualized in a built-in web dashboard
-- **AI-agent friendly** — all commands output JSON to stdout; ships as a [Codex / Claude Code skill](./SKILL.md) for autonomous knowledge work
-- **Dashboard** — interactive observatory with graph visualization, detail panel, and search
+- **Knowledge that compounds** — every source you add and every question you ask makes the wiki richer; knowledge is compiled once and kept current, not re-derived on every query
+- **Your files, your data** — plain Markdown pages you own and control; no cloud, no database server, no vendor lock-in
+- **Find anything** — search by metadata, keywords, or natural language meaning across your entire knowledge base
+- **See connections** — automatically maps relationships between pages into a navigable knowledge graph
+- **Ingest raw materials** — drop PDFs, docs, and notes into a vault; AI reads and converts them into structured wiki pages
+- **AI agents included** — ships as a [Codex / Claude Code skill](./SKILL.md) so agents can query, create, and maintain knowledge on your behalf
+- **Visual dashboard** — explore your knowledge graph, browse pages, and search from an interactive web interface
 
 ## Install
 
