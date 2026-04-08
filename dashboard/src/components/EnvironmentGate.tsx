@@ -28,7 +28,7 @@ export function EnvironmentGate({ children }: EnvironmentGateProps) {
   return (
     <div className="env-gate">
       <div className="env-gate__panel">
-        <h1>Knowledge Constellation</h1>
+        <h1>Wiki Intelligence</h1>
         {!localAllowed && (
           <p>
             This dashboard is intentionally localhost-only. Open it from

@@ -1,5 +1,5 @@
 {
-  "name": "@tiangong-lca/wiki",
+  "name": "@biaoo/wiki",
   "version": "0.1.0",
   "description": "Local-first wiki index and query engine for Markdown knowledge pages.",
   "type": "module",

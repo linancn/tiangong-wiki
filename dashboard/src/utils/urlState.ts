@@ -1,7 +1,7 @@
 import type { DashboardTab, DashboardUrlState } from "../types/dashboard";
 
-const DEFAULT_TAB: DashboardTab = "system";
-const TAB_SET = new Set<DashboardTab>(["system", "queue", "logs", "vault", "lint"]);
+const DEFAULT_TAB: DashboardTab = "observatory";
+const TAB_SET = new Set<DashboardTab>(["observatory", "system", "queue", "logs", "vault", "lint"]);
 
 export function readUrlState(): DashboardUrlState {
   const search = new URLSearchParams(window.location.search);
@@ -20,7 +20,12 @@ export function readUrlState(): DashboardUrlState {
 
 export function writeUrlState(state: DashboardUrlState): void {
   const params = new URLSearchParams(window.location.search);
-  params.set("tab", state.tab);
+
+  if (state.tab === DEFAULT_TAB) {
+    params.delete("tab");
+  } else {
+    params.set("tab", state.tab);
+  }
 
   if (state.selectedPageId) {
     params.set("selected", state.selectedPageId);
@@ -34,6 +39,9 @@ export function writeUrlState(state: DashboardUrlState): void {
     params.delete("q");
   }
 
-  const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+  const encoded = params.toString();
+  const next = encoded
+    ? `${window.location.pathname}?${encoded}${window.location.hash}`
+    : `${window.location.pathname}${window.location.hash}`;
   window.history.replaceState(null, "", next);
 }

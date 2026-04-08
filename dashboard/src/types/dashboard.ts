@@ -1,4 +1,4 @@
-export type DashboardTab = "system" | "queue" | "logs" | "vault" | "lint";
+export type DashboardTab = "observatory" | "system" | "queue" | "logs" | "vault" | "lint";
 export type DashboardLogLevel = "info" | "warning" | "error";
 export type DashboardDoctorSeverity = "ok" | "warn" | "error";
 

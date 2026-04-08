@@ -1,23 +1,34 @@
 import type { RefObject } from "preact";
 
-import type { DashboardGraphOverview, DashboardQueueSummary, DashboardSearchResult, DashboardStatus } from "../types/dashboard";
+import type { DashboardGraphOverview, DashboardQueueSummary, DashboardSearchResult, DashboardStatus, DashboardTab } from "../types/dashboard";
 import { formatNumber, formatRelativeTime } from "../utils/format";
 
 interface TopBarProps {
   status: DashboardStatus | null;
   graph: DashboardGraphOverview | null;
   queue: DashboardQueueSummary | null;
+  activeTab: DashboardTab;
   searchQuery: string;
   searchResults: DashboardSearchResult[];
   searchLoading: boolean;
   refreshing: boolean;
   usingFallback: boolean;
   searchInputRef: RefObject<HTMLInputElement>;
+  onTabChange: (tab: DashboardTab) => void;
   onSearchQueryChange: (value: string) => void;
   onSelectSearchResult: (result: DashboardSearchResult) => void;
   onRefresh: () => void;
   onReplayIntro: () => void;
 }
+
+const NAV_TABS: Array<{ id: DashboardTab; label: string }> = [
+  { id: "observatory", label: "Observatory" },
+  { id: "system", label: "System" },
+  { id: "queue", label: "Queue" },
+  { id: "logs", label: "Logs" },
+  { id: "vault", label: "Vault" },
+  { id: "lint", label: "Lint" },
+];
 
 function daemonClass(status: DashboardStatus | null): string {
   if (!status) {
@@ -36,53 +47,74 @@ export function TopBar({
   status,
   graph,
   queue,
+  activeTab,
   searchQuery,
   searchResults,
   searchLoading,
   refreshing,
   usingFallback,
   searchInputRef,
+  onTabChange,
   onSearchQueryChange,
   onSelectSearchResult,
   onRefresh,
   onReplayIntro,
 }: TopBarProps) {
+  const hasSearchQuery = searchQuery.trim().length > 0;
+
   return (
     <header className="topbar">
       <div className="topbar__brand shell-brand">
-        <span className="shell-eyebrow">Stellar Intel</span>
-        <h1>Knowledge Constellation</h1>
-        <p>whole-library graph observatory · localhost-only operations cockpit</p>
+        <button
+          type="button"
+          className="topbar__brand-link"
+          onClick={() => onTabChange("observatory")}
+        >
+          <span className="shell-eyebrow">Wiki</span>
+          <h1>Intelligence</h1>
+        </button>
       </div>
 
-      <div className="topbar__meta">
-        <div className={`shell-status-chip daemon-chip ${daemonClass(status)}`}>
-          <span className="shell-status-dot daemon-chip__dot" />
-          <span>{status?.daemon.running ? "daemon online" : "daemon offline"}</span>
-          <code>{status?.daemon.currentTask ?? "idle"}</code>
-        </div>
-        <div className="shell-metrics topbar__counts">
-          <div title="total nodes">
-            graph <strong>{formatNumber(graph?.totalNodes ?? 0)}</strong>
-          </div>
-          <div title="visible nodes">
-            visible <strong>{formatNumber(graph?.visibleNodeCount ?? 0)}</strong>
-          </div>
-          <div title="queue pending">
-            queue <strong>{formatNumber(queue?.counts.pending ?? 0)}</strong>
-          </div>
-        </div>
-        <div className="topbar__freshness shell-meta">
-          refreshed {formatRelativeTime(status?.generatedAt ?? null)}
-          {usingFallback && <em>fallback snapshot</em>}
-        </div>
-      </div>
+      <nav className="topbar__nav">
+        {NAV_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`topbar__nav-tab ${activeTab === tab.id ? "is-active" : ""}`}
+            onClick={() => onTabChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
       <div className="topbar__actions">
-        <div className="global-search">
-          <span className="global-search__meta">
-            {searchLoading ? "scanning full library…" : `${searchResults.length} live hits`}
+        <div className="topbar__status-row">
+          <div className={`shell-status-chip daemon-chip ${daemonClass(status)}`}>
+            <span className="shell-status-dot daemon-chip__dot" />
+            <span>{status?.daemon.running ? "online" : "offline"}</span>
+            <code>{status?.daemon.currentTask ?? "idle"}</code>
+          </div>
+          <span className="topbar__counts-inline">
+            <span title="total nodes">
+              graph <strong>{formatNumber(graph?.totalNodes ?? 0)}</strong>
+            </span>
+            <span title="queue pending">
+              queue <strong>{formatNumber(queue?.counts.pending ?? 0)}</strong>
+            </span>
           </span>
+          <span className="topbar__freshness-inline shell-meta">
+            {formatRelativeTime(status?.generatedAt ?? null)}
+            {usingFallback && <em>fallback</em>}
+          </span>
+        </div>
+
+        <div className="global-search">
+          {hasSearchQuery && (
+            <span className="global-search__meta">
+              {searchLoading ? "scanning…" : `${searchResults.length} hits`}
+            </span>
+          )}
           <input
             aria-label="Search across all pages"
             autoComplete="off"
@@ -93,7 +125,7 @@ export function TopBar({
               onSearchQueryChange((event.currentTarget as HTMLInputElement).value)
             }
           />
-          {searchQuery.trim() && searchResults.length > 0 && (
+          {hasSearchQuery && searchResults.length > 0 && (
             <div className="search-results">
               {searchResults.slice(0, 12).map((result) => (
                 <button
@@ -117,10 +149,10 @@ export function TopBar({
         </div>
 
         <button className="btn btn-ghost" onClick={onReplayIntro} type="button">
-          replay ignition
+          replay
         </button>
         <button className="btn btn-primary" onClick={onRefresh} type="button" disabled={refreshing}>
-          {refreshing ? "refreshing…" : "manual refresh"}
+          {refreshing ? "refreshing…" : "refresh"}
         </button>
       </div>
     </header>

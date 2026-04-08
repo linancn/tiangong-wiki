@@ -142,15 +142,29 @@ function isActionablePageId(pageId: string | null | undefined): boolean {
 export function BottomDock(props: BottomDockProps) {
   if (!props.expanded) {
     return (
-      <div className="bottom-dock bottom-dock--collapsed">
-        <button type="button" className="bottom-dock__launcher" onClick={props.onToggleExpanded}>
-          <span className="shell-eyebrow">Operations dock</span>
-          <strong>{props.activeTab}</strong>
-          <small>
-            queue {formatNumber(props.queueSummary?.counts.pending ?? props.status?.queue.pending ?? 0)} · logs {props.logStreamStatus}
-          </small>
-        </button>
-      </div>
+      <section className="bottom-dock bottom-dock--collapsed">
+        <div className="bottom-dock__launcher">
+          <div className="bottom-dock__collapsed-tabs">
+            {TAB_ORDER.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={props.activeTab === tab ? "is-active" : ""}
+                onClick={() => props.onTabChange(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <button type="button" className="bottom-dock__collapsed-query" onClick={props.onToggleExpanded}>
+            <span>search the live universe…</span>
+            <code>
+              queue {formatNumber(props.queueSummary?.counts.pending ?? props.status?.queue.pending ?? 0)} · logs {props.logStreamStatus}
+            </code>
+          </button>
+        </div>
+      </section>
     );
   }
 

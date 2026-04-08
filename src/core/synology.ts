@@ -468,7 +468,7 @@ export class SynologyClient {
   async listFolderPage(folderPath: string, offset = 0, limit = 500): Promise<SynologyListItem[]> {
     const normalizedPath = normalizeSynologyRemotePath(folderPath, "folder_path");
     const data = await this.callJson("filestation.list", "list", {
-      folder_path: JSON.stringify([normalizedPath]),
+      folder_path: normalizedPath,
       additional: JSON.stringify(["size", "time"]),
       offset,
       limit,
@@ -521,7 +521,7 @@ export class SynologyClient {
         api: spec.apiName,
         version: spec.version,
         method: "download",
-        path: JSON.stringify([normalizedPath]),
+        path: normalizedPath,
         mode: "download",
         _sid: this.sid,
       },

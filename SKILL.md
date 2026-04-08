@@ -104,6 +104,7 @@ Automatic vault processing uses additional `WIKI_AGENT_*` variables, but those b
 ## References
 - `references/cli-interface.md`
 - `references/data-model.md`
+- `references/template-design-guide.md`
 - `references/runtime.md`
 - `references/env.md`
 - `references/wiki-maintenance-instruction.md`

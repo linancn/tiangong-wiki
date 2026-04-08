@@ -30,10 +30,11 @@ export function computeConstellationLayout(nodes: DashboardGraphNode[]): Map<str
   }
 
   const groups = [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right));
-  const clusterRadius = 0.36;
+  const clusterRadius = nodes.length > 30 ? 0.38 : 0.34;
+  const angleOffset = hashToFloat(nodes[0]?.nodeKey ?? "seed") * Math.PI;
 
   groups.forEach(([groupKey, groupNodes], groupIndex) => {
-    const angle = (Math.PI * 2 * groupIndex) / groups.length;
+    const angle = angleOffset + (Math.PI * 2 * groupIndex) / groups.length;
     const anchorX = 0.5 + Math.cos(angle) * clusterRadius;
     const anchorY = 0.5 + Math.sin(angle) * clusterRadius;
 
@@ -44,12 +45,14 @@ export function computeConstellationLayout(nodes: DashboardGraphNode[]): Map<str
         const ring = Math.floor(Math.sqrt(nodeIndex));
         const inRingIndex = nodeIndex - ring * ring;
         const ringCount = Math.max(1, ring * 2 + 1);
-        const ringAngle = (Math.PI * 2 * inRingIndex) / ringCount + hashToFloat(node.nodeKey) * 0.55;
-        const ringDistance = 0.03 + ring * 0.037 + hashToFloat(groupKey + node.nodeKey) * 0.015;
+        const ringAngle = (Math.PI * 2 * inRingIndex) / ringCount + hashToFloat(node.nodeKey) * 0.65;
+        const ringBase = nodes.length > 30 ? 0.04 : 0.03;
+        const ringStep = nodes.length > 30 ? 0.052 : 0.04;
+        const ringDistance = ringBase + ring * ringStep + hashToFloat(groupKey + node.nodeKey) * 0.02;
 
         positions.set(node.nodeKey, {
-          x: anchorX + Math.cos(ringAngle) * ringDistance,
-          y: anchorY + Math.sin(ringAngle) * ringDistance,
+          x: Math.max(0.06, Math.min(0.94, anchorX + Math.cos(ringAngle) * ringDistance)),
+          y: Math.max(0.06, Math.min(0.94, anchorY + Math.sin(ringAngle) * ringDistance)),
         });
       });
   });

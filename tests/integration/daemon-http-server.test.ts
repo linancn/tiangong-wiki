@@ -392,7 +392,7 @@ describe("daemon HTTP server integration", () => {
 
     const response = await fetch(payload.url);
     expect(response.ok).toBe(true);
-    expect(await response.text()).toContain("Knowledge Constellation");
+    expect(await response.text()).toContain("Wiki Intelligence");
   });
 
   it("falls back to local reads when the daemon is degraded and refuses write commands", async () => {

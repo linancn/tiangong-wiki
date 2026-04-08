@@ -1,6 +1,6 @@
 # Wiki Skill
 
-`@tiangong-lca/wiki` — 本地优先的 Markdown 知识库索引与查询引擎。
+`@biaoo/wiki` — 本地优先的 Markdown 知识库索引与查询引擎。
 
 将 Markdown 文件作为唯一真实来源（SSOT），通过 SQLite 构建结构化索引、全文搜索、语义向量检索和知识图谱，供 AI Agent 或人工直接使用。
 
@@ -145,7 +145,7 @@ vault 新文件 → vault_processing_queue (pending)
 ### 从 npm 安装
 
 ```bash
-npm install -g @tiangong-lca/wiki
+npm install -g @biaoo/wiki
 wiki --version
 ```
 
@@ -164,7 +164,7 @@ wiki --version
 node dist/index.js --version
 ```
 
-`npm link` 会在全局 bin 目录创建 `wiki` 符号链接，指向当前目录的 `dist/index.js`。卸载用 `npm unlink -g @tiangong-lca/wiki`。
+`npm link` 会在全局 bin 目录创建 `wiki` 符号链接，指向当前目录的 `dist/index.js`。卸载用 `npm unlink -g @biaoo/wiki`。
 
 ### 作为 Codex Skill 安装
 
@@ -172,7 +172,7 @@ wiki-skill 同时是一个标准的 [Agent Skill](https://github.com/vercel-labs
 
 ```bash
 # 1. 先安装 npm 包（提供 wiki CLI + 编译产物 + native 依赖）
-npm install -g @tiangong-lca/wiki
+npm install -g @biaoo/wiki
 
 # 2. 将 skill 注册到 agent（symlink SKILL.md + references/ 等到 agent skills 目录）
 npx skills add Biaoo/wiki -a codex           # Codex agent

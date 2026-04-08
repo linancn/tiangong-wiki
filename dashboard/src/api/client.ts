@@ -45,9 +45,14 @@ export interface LogStreamHandle {
 }
 
 function defaultDashboardApiBasePath(): string {
-  const baseUrl = typeof import.meta !== "undefined" && import.meta.env?.BASE_URL ? import.meta.env.BASE_URL : "/";
-  const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-  return `${normalizedBase || ""}/api/dashboard`;
+  const configuredBasePath =
+    typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DASHBOARD_API_BASE_PATH === "string"
+      ? import.meta.env.VITE_DASHBOARD_API_BASE_PATH.trim()
+      : "";
+  if (configuredBasePath) {
+    return configuredBasePath.replace(/\/+$/g, "");
+  }
+  return "/api/dashboard";
 }
 
 function buildQuery(

@@ -108,9 +108,9 @@ export function IntroAnimation(props: IntroAnimationProps) {
       <div className={`intro intro--short ${closing ? "intro--closing" : ""}`} onClick={props.onComplete}>
         <div className="intro__grain" />
         <div className="intro__short-mark">
-          <p className="eyebrow">Knowledge Constellation</p>
+          <p className="eyebrow">Wiki Intelligence</p>
           <h1>Wiki Dashboard</h1>
-          <span>Dark-only local observatory</span>
+          <span>Local knowledge observatory</span>
         </div>
       </div>
     );

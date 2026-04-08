@@ -5,18 +5,18 @@ import type { RefObject } from "preact";
 import { colorForPageType } from "../constants/pageTypeColors";
 import type { DashboardGraphEdge, DashboardGraphNode, DashboardGraphOverview, DashboardPageSummary } from "../types/dashboard";
 import { clamp } from "../utils/format";
-import { computeConstellationLayout } from "../utils/layout";
 
 interface GraphCanvasProps {
   graph: DashboardGraphOverview | null;
   selectedPageId: string | null;
+  selectionFocusKey: number;
   focusedPage: DashboardPageSummary | null;
   loading: boolean;
   searchQuery: string;
   searchResultCount: number;
   resetViewToken: number;
-  onRefresh: () => void;
   onSelectPage: (pageId: string) => void;
+  onDeselectPage: () => void;
 }
 
 interface ViewportSize {
@@ -82,7 +82,14 @@ function nodeRadius(node: Pick<DashboardGraphNode, "degree">): number {
 }
 
 function shouldShowLabel(node: Pick<DashboardGraphNode, "degree" | "orphan">, nodeCount: number): boolean {
-  return node.degree >= 4 || node.orphan || nodeCount <= 14;
+  if (nodeCount <= 14) {
+    return true;
+  }
+  if (node.orphan) {
+    return nodeCount <= 20;
+  }
+  const threshold = nodeCount > 40 ? 8 : nodeCount > 25 ? 6 : 4;
+  return node.degree >= threshold;
 }
 
 function edgeStroke(edgeType: string): string {
@@ -130,30 +137,15 @@ function buildDetachedNode(focusedPage: DashboardPageSummary | null, graph: Dash
   };
 }
 
-function syncNormalizedPositions(nodes: DashboardGraphNode[], positionsRef: { current: Map<string, { x: number; y: number }> }): void {
-  const nextLayout = computeConstellationLayout(nodes);
-  const nextPositions = new Map<string, { x: number; y: number }>();
-
-  for (const node of nodes) {
-    nextPositions.set(node.nodeKey, positionsRef.current.get(node.nodeKey) ?? nextLayout.get(node.nodeKey) ?? { x: 0.5, y: 0.5 });
-  }
-
-  positionsRef.current = nextPositions;
-}
-
 function buildGraphData(options: {
   graph: DashboardGraphOverview;
-  size: ViewportSize;
   detachedNode: DetachedStageNode | null;
-  positionsRef: { current: Map<string, { x: number; y: number }> };
 }): GraphData {
-  const { graph, size, detachedNode, positionsRef } = options;
+  const { graph, detachedNode } = options;
 
   const nodes = graph.nodes.map((node) => {
-    const point = positionsRef.current.get(node.nodeKey) ?? { x: 0.5, y: 0.5 };
     const color = colorForPageType(node.pageType);
     const labelVisible = shouldShowLabel(node, graph.nodes.length);
-    const labelPlacement: "left" | "right" = point.x > 0.68 ? "left" : "right";
 
     return {
       id: node.nodeKey,
@@ -163,11 +155,10 @@ function buildGraphData(options: {
         title: node.title,
         status: node.status,
         nodeKey: node.nodeKey,
+        degree: node.degree,
         detached: false,
       },
       style: {
-        x: point.x * size.width,
-        y: point.y * size.height,
         size: nodeRadius(node),
         fill: color,
         stroke: "#eff4ff",
@@ -185,8 +176,8 @@ function buildGraphData(options: {
         labelFill: "rgba(238, 243, 255, 0.76)",
         labelFontFamily: "JetBrains Mono",
         labelFontSize: labelVisible ? 11 : 10,
-        labelPlacement,
-        labelOffsetX: point.x > 0.68 ? -12 : 12,
+        labelPlacement: "right" as const,
+        labelOffsetX: 12,
         labelOffsetY: 1,
       },
     };
@@ -202,11 +193,10 @@ function buildGraphData(options: {
         title: detachedNode.title,
         status: detachedNode.status,
         nodeKey: detachedNode.nodeKey,
+        degree: 0,
         detached: true,
       },
       style: {
-        x: size.width * 0.56,
-        y: size.height * 0.52,
         size: 18,
         fill: detachedColor,
         stroke: "#f8fbff",
@@ -224,7 +214,7 @@ function buildGraphData(options: {
         labelFill: "rgba(246, 250, 255, 0.92)",
         labelFontFamily: "JetBrains Mono",
         labelFontSize: 11,
-        labelPlacement: "right",
+        labelPlacement: "right" as const,
         labelOffsetX: 14,
         labelOffsetY: 2,
       },
@@ -240,13 +230,13 @@ function buildGraphData(options: {
     },
     style: {
       stroke: edgeStroke(edge.edgeType),
-      strokeOpacity: 0.94,
-      lineWidth: 1.2,
+      strokeOpacity: 0.14,
+      lineWidth: 0.8,
       lineDash: edgeDash(edge.edgeType),
-      halo: true,
+      halo: false,
       haloStroke: edgeStroke(edge.edgeType),
-      haloLineWidth: 12,
-      haloStrokeOpacity: 0.12,
+      haloLineWidth: 8,
+      haloStrokeOpacity: 0.06,
       endArrow: false,
     },
   }));
@@ -321,9 +311,9 @@ export function GraphCanvas(props: GraphCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const minimapRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
-  const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const onSelectPageRef = useRef(props.onSelectPage);
   const focusedNodeKeyRef = useRef<string | null>(null);
+  const appliedSelectionFocusKeyRef = useRef(0);
   const selectedNodeKeyRef = useRef<string | null>(null);
   const hoveredNodeKeyRef = useRef<string | null>(null);
   const lastGraphSignatureRef = useRef<string | null>(null);
@@ -422,26 +412,6 @@ export function GraphCanvas(props: GraphCanvasProps) {
     });
   }
 
-  function updateDraggedNodePosition(nodeKey: string) {
-    const instance = graphRef.current;
-    if (!instance || !props.graph?.nodes.some((node) => node.nodeKey === nodeKey)) {
-      return;
-    }
-    const data = instance.getNodeData(nodeKey) as {
-      style?: {
-        x?: number;
-        y?: number;
-      };
-    };
-    if (typeof data?.style?.x !== "number" || typeof data.style.y !== "number") {
-      return;
-    }
-    positionsRef.current.set(nodeKey, {
-      x: clamp(data.style.x / size.width, 0.08, 0.92),
-      y: clamp(data.style.y / size.height, 0.1, 0.9),
-    });
-  }
-
   useEffect(() => {
     return () => {
       graphRef.current?.destroy();
@@ -454,14 +424,10 @@ export function GraphCanvas(props: GraphCanvasProps) {
       return;
     }
 
-    syncNormalizedPositions(props.graph.nodes, positionsRef);
-
     const graphSignature = `${props.graph.nodes.map((node) => node.nodeKey).join("|")}::${props.graph.edges.length}::${Boolean(detachedNode)}`;
-      const data = buildGraphData({
-        graph: props.graph,
-        size,
-        detachedNode,
-        positionsRef,
+    const data = buildGraphData({
+      graph: props.graph,
+      detachedNode,
     });
 
     let cancelled = false;
@@ -478,15 +444,36 @@ export function GraphCanvas(props: GraphCanvasProps) {
           padding: GRAPH_PADDING,
           animation: true,
           data,
+          layout: {
+            type: "d3-force",
+            link: {
+              distance: 100,
+              strength: 0.3,
+            },
+            manyBody: {
+              strength: -120,
+            },
+            collide: {
+              radius: 24,
+              strength: 0.8,
+            },
+            center: {
+              x: size.width / 2,
+              y: size.height / 2,
+              strength: 0.05,
+            },
+          },
           node: {
             type: "circle",
             state: {
               selected: {
                 stroke: "#f8fbff",
-                lineWidth: 1.8,
+                lineWidth: 2.2,
+                fillOpacity: 1,
+                shadowBlur: 28,
                 halo: true,
-                haloLineWidth: 34,
-                haloStrokeOpacity: 0.58,
+                haloLineWidth: 38,
+                haloStrokeOpacity: 0.62,
               },
               highlight: {
                 stroke: "#dce8ff",
@@ -503,9 +490,11 @@ export function GraphCanvas(props: GraphCanvasProps) {
                 haloStrokeOpacity: 0.36,
               },
               inactive: {
-                opacity: 0.18,
-                labelFill: "rgba(238, 243, 255, 0.16)",
-                haloStrokeOpacity: 0.04,
+                fillOpacity: 0.08,
+                strokeOpacity: 0.06,
+                shadowBlur: 0,
+                haloStrokeOpacity: 0,
+                labelFill: "rgba(238, 243, 255, 0.12)",
               },
             },
           },
@@ -513,22 +502,22 @@ export function GraphCanvas(props: GraphCanvasProps) {
             type: "quadratic",
             state: {
               highlight: {
-                strokeOpacity: 1,
-                lineWidth: 1.6,
+                strokeOpacity: 0.72,
+                lineWidth: 1.4,
                 halo: true,
-                haloLineWidth: 16,
-                haloStrokeOpacity: 0.18,
+                haloLineWidth: 12,
+                haloStrokeOpacity: 0.14,
               },
               inactive: {
-                opacity: 0.08,
-                strokeOpacity: 0.06,
+                strokeOpacity: 0.02,
+                lineWidth: 0.4,
               },
             },
           },
           behaviors: [
             { type: "drag-canvas", key: "drag-canvas" },
             { type: "zoom-canvas", key: "zoom-canvas", sensitivity: 1.08 },
-            { type: "drag-element", key: "drag-element" },
+            { type: "drag-element-force", key: "drag-element-force" },
             { type: "focus-element", key: "focus-element", animation: { duration: 760, easing: "ease-in-out" } },
           ],
           plugins: [
@@ -570,14 +559,6 @@ export function GraphCanvas(props: GraphCanvasProps) {
         instance.on(NodeEvent.POINTER_OUT, () => {
           hoveredNodeKeyRef.current = null;
           setHoveredNodeKey(null);
-        });
-        instance.on(NodeEvent.DRAG_END, (event) => {
-          const targetId = String((event as { target?: { id?: string } }).target?.id ?? "");
-          if (!targetId) {
-            return;
-          }
-          updateDraggedNodePosition(targetId);
-          syncViewportDetails();
         });
         instance.on(GraphEvent.AFTER_TRANSFORM, () => {
           syncViewportDetails();
@@ -645,15 +626,16 @@ export function GraphCanvas(props: GraphCanvasProps) {
       syncViewportDetails();
       return;
     }
-    if (focusedNodeKeyRef.current === selectedNodeKey) {
+    if (props.selectionFocusKey === 0 || appliedSelectionFocusKeyRef.current === props.selectionFocusKey) {
       syncViewportDetails();
       return;
     }
+    appliedSelectionFocusKeyRef.current = props.selectionFocusKey;
     focusedNodeKeyRef.current = selectedNodeKey;
     void focusSelectedNode(graphRef.current, selectedNodeKey).then(() => {
       syncViewportDetails();
     });
-  }, [selectedNodeKey]);
+  }, [props.selectionFocusKey, selectedNodeKey]);
 
   useEffect(() => {
     if (lastResetTokenRef.current === props.resetViewToken) {
@@ -667,7 +649,7 @@ export function GraphCanvas(props: GraphCanvasProps) {
     return (
       <section className="graph-canvas graph-stage" ref={hostRef}>
         <div className="graph-canvas__placeholder graph-stage__placeholder">
-          <strong>Loading constellation slice…</strong>
+          <strong>Loading graph overview…</strong>
           <p>The daemon is assembling the current full-library overview.</p>
         </div>
       </section>
@@ -680,70 +662,106 @@ export function GraphCanvas(props: GraphCanvasProps) {
     <section className="graph-canvas graph-stage" ref={hostRef}>
       <div className="graph-stage__canvas" ref={canvasRef} />
 
-      <div className="graph-stage__copy">
-        <span className="shell-eyebrow">Active observation</span>
-        <h2>Whole-library overview</h2>
-        <p>
-          {props.graph.sampleStrategy?.limit ? `overview cap ${props.graph.sampleStrategy.limit} · ` : ""}
-          {props.graph.truncated
-            ? `${props.graph.visibleNodeCount}/${props.graph.totalNodes} nodes visible`
-            : `${props.graph.visibleNodeCount} nodes visible`}
-          {" · "}
-          {props.graph.visibleEdgeCount} live edges
-        </p>
+      <div className="graph-stage__toolbar">
+        <div className="graph-stage__toolbar-row">
+          <div className="graph-stage__tool-group">
+            <button type="button" title="全景" onClick={() => fitOverview(true)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              title="定位选中节点"
+              disabled={!selectedNodeKey}
+              onClick={() => {
+                if (!selectedNodeKey || !graphRef.current) {
+                  return;
+                }
+                void focusSelectedNode(graphRef.current, selectedNodeKey);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" />
+                <line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" />
+                <line x1="18" y1="12" x2="22" y2="12" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              title="重置视图"
+              onClick={() => {
+                props.onDeselectPage();
+                fitOverview(true);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+            </button>
+          </div>
+          <div className="graph-stage__tool-separator" />
+          <div className="graph-stage__tool-group">
+            <button
+              type="button"
+              title="缩小"
+              onClick={() => {
+                const instance = graphRef.current;
+                if (!instance) return;
+                void instance.zoomTo(instance.getZoom() * 0.8, { duration: 240, easing: "ease-in-out" });
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="graph-stage__zoom-label"
+              title="重置为 100%"
+              onClick={() => {
+                const instance = graphRef.current;
+                if (!instance) return;
+                void instance.zoomTo(1, { duration: 320, easing: "ease-in-out" });
+              }}
+            >
+              {zoomLabel(zoom)}
+            </button>
+            <button
+              type="button"
+              title="放大"
+              onClick={() => {
+                const instance = graphRef.current;
+                if (!instance) return;
+                void instance.zoomTo(instance.getZoom() * 1.25, { duration: 240, easing: "ease-in-out" });
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          </div>
+          <span className="graph-stage__toolbar-stats shell-meta">
+            {props.graph.truncated
+              ? `${props.graph.visibleNodeCount}/${props.graph.totalNodes}`
+              : `${props.graph.visibleNodeCount}`}
+            {" nodes · "}
+            {props.graph.visibleEdgeCount} edges
+          </span>
+        </div>
+        {props.searchQuery.trim() ? (
+          <div className="graph-stage__tool-search">
+            <span>{props.searchQuery.trim()}</span>
+            <code>{props.searchResultCount} hits</code>
+          </div>
+        ) : null}
         {focusedDetached && props.focusedPage ? (
-          <p className="graph-stage__hint">
-            {props.focusedPage.title} is outside the visible slice. A detached focus node is pinned so search can still hand off into detail.
+          <p className="graph-stage__detached-hint shell-meta">
+            {props.focusedPage.title} — detached focus node (outside visible slice)
           </p>
         ) : null}
-      </div>
-
-      <div className="graph-stage__tools">
-        <div className="graph-stage__tool-group">
-          <button type="button" onClick={() => fitOverview(true)}>
-            fit
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const instance = graphRef.current;
-              if (!instance) {
-                return;
-              }
-              void instance.zoomTo(1, { duration: 320, easing: "ease-in-out" });
-            }}
-          >
-            100%
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const instance = graphRef.current;
-              if (!instance) {
-                return;
-              }
-              void instance.zoomTo(1.4, { duration: 320, easing: "ease-in-out" }, instance.getCanvasCenter());
-            }}
-          >
-            140%
-          </button>
-          <button
-            type="button"
-            disabled={!selectedNodeKey}
-            onClick={() => {
-              if (!selectedNodeKey || !graphRef.current) {
-                return;
-              }
-              void focusSelectedNode(graphRef.current, selectedNodeKey);
-            }}
-          >
-            focus
-          </button>
-        </div>
-        <div className="graph-stage__tool-search">
-          <span>{props.searchQuery.trim() ? props.searchQuery.trim() : "Search whole library from the top bar"}</span>
-          <code>{props.searchQuery.trim() ? `${props.searchResultCount} hits` : zoomLabel(zoom)}</code>
-        </div>
       </div>
 
       <div className="graph-stage__legend">
@@ -777,16 +795,9 @@ export function GraphCanvas(props: GraphCanvasProps) {
         </div>
       ) : null}
 
-      <div className="graph-stage__status">
-        <span className="shell-eyebrow">Stage status</span>
-        <div>
-          <strong>{zoomLabel(zoom)}</strong>
-          <small>{props.loading ? "refreshing overview…" : "drag-enabled · minimap live"}</small>
-        </div>
-        <button className="btn btn-primary" type="button" onClick={props.onRefresh} disabled={props.loading}>
-          {props.loading ? "refreshing…" : "reload overview"}
-        </button>
-      </div>
+      {props.loading ? (
+        <span className="graph-stage__loading-badge shell-meta">refreshing…</span>
+      ) : null}
     </section>
   );
 }
