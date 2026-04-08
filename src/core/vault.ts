@@ -1,6 +1,8 @@
 import type Database from "better-sqlite3";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import AdmZip from "adm-zip";
 
 import { type SynologyClient, type SynologyListItem, normalizeSynologyRemotePath, withSynologyClient } from "./synology.js";
 import type { VaultChange, VaultFile, VaultHashMode } from "../types/page.js";
@@ -80,10 +82,6 @@ function localVaultFiles(vaultPath: string, hashMode: VaultHashMode, vaultFileTy
       indexedAt,
     };
   });
-}
-
-function getExtractionScriptPath(packageRoot: string): string {
-  return path.join(packageRoot, "scripts", "extract_vault_text.py");
 }
 
 function getSynologyCacheMetaPath(localPath: string): string {
@@ -186,17 +184,6 @@ export function getSynologyCacheStatus(vaultPath: string, file: VaultFile, env: 
     localPath,
     metadataPath,
   };
-}
-
-function parseJsonPayload(raw: string): unknown {
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch (error) {
-    throw new AppError("Failed to parse JSON payload from helper script", "runtime", {
-      cause: error instanceof Error ? error.message : String(error),
-      raw,
-    });
-  }
 }
 
 function getSynologyItemPath(item: SynologyListItem): string | null {
@@ -389,16 +376,108 @@ export async function ensureLocalVaultFile(
   return localPath;
 }
 
-export function extractVaultText(filePath: string, packageRoot: string): string {
-  const scriptPath = getExtractionScriptPath(packageRoot);
-  const raw = execFileSync("python3", [scriptPath, filePath], {
-    encoding: "utf8",
-  });
-  const payload = parseJsonPayload(raw) as { text?: unknown; error?: unknown };
-  if (payload.error) {
-    throw new AppError(String(payload.error), "runtime");
+const TEXT_EXTS = new Set([".txt", ".md", ".markdown", ".json", ".csv", ".tsv", ".yaml", ".yml"]);
+const ZIP_EXTS = new Set([".docx", ".pptx", ".xlsx"]);
+
+function readTextDirect(filePath: string): string {
+  try {
+    const text = readFileSync(filePath, "utf8");
+    return text.replace(/\0/g, " ").trim();
+  } catch {
+    return "";
   }
-  return typeof payload.text === "string" ? payload.text.trim() : "";
+}
+
+function printableRatio(text: string): number {
+  if (!text) return 0;
+  let count = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127)) {
+      count++;
+    }
+  }
+  return count / Math.max(text.length, 1);
+}
+
+function tryPlainText(filePath: string): string {
+  const text = readTextDirect(filePath);
+  return printableRatio(text) >= 0.85 ? text : "";
+}
+
+function stripXmlText(xmlBuffer: Buffer): string {
+  try {
+    const xml = xmlBuffer.toString("utf8");
+    const withoutPi = xml.replace(/<\?[^?]*\?>/g, "");
+    const text = withoutPi.replace(/<[^>]+>/g, " ");
+    return text.replace(/\s+/g, " ").trim();
+  } catch {
+    return "";
+  }
+}
+
+function extractZipXml(filePath: string): string {
+  try {
+    const zip = new AdmZip(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const entries = zip.getEntries().sort((a, b) => a.entryName.localeCompare(b.entryName));
+    const snippets: string[] = [];
+
+    for (const entry of entries) {
+      const name = entry.entryName.toLowerCase();
+      if (ext === ".docx" && !name.startsWith("word/")) continue;
+      if (ext === ".pptx" && !name.startsWith("ppt/slides/")) continue;
+      if (ext === ".xlsx" && !(name.startsWith("xl/sharedstrings") || name.startsWith("xl/worksheets/"))) continue;
+      if (!name.endsWith(".xml")) continue;
+
+      const text = stripXmlText(entry.getData());
+      if (text) snippets.push(text);
+    }
+
+    return snippets.join("\n").trim();
+  } catch {
+    return "";
+  }
+}
+
+function extractPdfText(filePath: string): string {
+  try {
+    const result = execFileSync("/usr/bin/mdls", ["-raw", "-name", "kMDItemTextContent", filePath], {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const text = (result || "").trim();
+    if (text && text !== "(null)") return text;
+  } catch { /* ignore */ }
+
+  try {
+    const result = execFileSync("/usr/bin/strings", ["-n", "6", filePath], {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const lines = result.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 400);
+    if (lines.length) return lines.join("\n");
+  } catch { /* ignore */ }
+
+  return "";
+}
+
+export function extractVaultText(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (TEXT_EXTS.has(ext)) {
+    return readTextDirect(filePath);
+  }
+  if (ZIP_EXTS.has(ext)) {
+    const zipped = extractZipXml(filePath);
+    return zipped || tryPlainText(filePath);
+  }
+  if (ext === ".pdf") {
+    const pdfText = extractPdfText(filePath);
+    return pdfText || tryPlainText(filePath);
+  }
+
+  return tryPlainText(filePath);
 }
 
 export function syncVaultIndex(

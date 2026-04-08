@@ -511,7 +511,7 @@ async function buildVaultPreview(
 
   try {
     localPath = await ensureLocalVaultFile(file, paths.vaultPath, env);
-    preview = previewText(extractVaultText(localPath, paths.packageRoot), 10_000);
+    preview = previewText(extractVaultText(localPath), 10_000);
     previewAvailable = preview.length > 0;
   } catch (error) {
     previewError = error instanceof Error ? error.message : String(error);
