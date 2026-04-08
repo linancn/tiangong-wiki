@@ -1,7 +1,7 @@
 import { accessSync, constants, readFileSync } from "node:fs";
 import path from "node:path";
-import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { confirm, input, password, select } from "@inquirer/prompts";
 
 import { DEFAULT_WIKI_ENV_FILE, getCliEnvironmentInfo, parseEnvFile, serializeEnvEntries } from "./cli-env.js";
 import { resolveTemplateFilePath, loadConfig } from "./config.js";
@@ -111,8 +111,35 @@ interface PromptContext {
   output: NodeJS.WritableStream;
 }
 
+interface PromptChoice<Value extends string> {
+  value: Value;
+  label: string;
+  description?: string;
+}
+
+interface TextPromptOptions {
+  message: string;
+  defaultValue?: string;
+  required?: boolean;
+  validator?: (value: string) => string | null;
+}
+
+interface ConfirmPromptOptions {
+  message: string;
+  defaultValue: boolean;
+}
+
+interface SelectPromptOptions<Value extends string> {
+  message: string;
+  defaultValue: Value;
+  choices: PromptChoice<Value>[];
+}
+
 interface PromptDriver {
-  ask(prompt: string): Promise<string>;
+  input(options: TextPromptOptions): Promise<string>;
+  password(options: TextPromptOptions): Promise<string>;
+  confirm(options: ConfirmPromptOptions): Promise<boolean>;
+  select<Value extends string>(options: SelectPromptOptions<Value>): Promise<Value>;
   close(): void;
 }
 
@@ -223,15 +250,79 @@ function validateWikiPath(rawValue: string): string | null {
   return null;
 }
 
-class ReadlinePromptDriver implements PromptDriver {
-  constructor(private readonly rl: ReturnType<typeof createInterface>) {}
+class InquirerPromptDriver implements PromptDriver {
+  constructor(
+    private readonly inputStream: NodeJS.ReadableStream,
+    private readonly outputStream: NodeJS.WritableStream,
+  ) {}
 
-  ask(prompt: string): Promise<string> {
-    return this.rl.question(prompt);
+  input(options: TextPromptOptions): Promise<string> {
+    return input(
+      {
+        message: options.message,
+        default: options.defaultValue,
+        required: options.required !== false,
+        validate: (value) => options.validator?.(value) ?? true,
+      },
+      this.getContext(),
+    );
+  }
+
+  password(options: TextPromptOptions): Promise<string> {
+    const defaultValue = options.defaultValue ?? "";
+    const hasDefault = defaultValue.length > 0;
+
+    return password(
+      {
+        message: hasDefault ? `${options.message} (press enter to keep current value)` : options.message,
+        mask: "*",
+        validate: (value) => {
+          const candidate = value.length === 0 && hasDefault ? defaultValue : value;
+          if (options.required !== false && candidate.length === 0) {
+            return `${options.message} is required.`;
+          }
+          return options.validator?.(candidate) ?? true;
+        },
+      },
+      this.getContext(),
+    ).then((value) => (value.length === 0 && hasDefault ? defaultValue : value));
+  }
+
+  confirm(options: ConfirmPromptOptions): Promise<boolean> {
+    return confirm(
+      {
+        message: options.message,
+        default: options.defaultValue,
+      },
+      this.getContext(),
+    );
+  }
+
+  select<Value extends string>(options: SelectPromptOptions<Value>): Promise<Value> {
+    return select(
+      {
+        message: options.message,
+        default: options.defaultValue,
+        choices: options.choices.map((choice) => ({
+          value: choice.value,
+          name: choice.label,
+          description: choice.description,
+        })),
+      },
+      this.getContext(),
+    );
+  }
+
+  private getContext() {
+    return {
+      input: this.inputStream,
+      output: this.outputStream,
+      clearPromptOnDone: false,
+    };
   }
 
   close(): void {
-    this.rl.close();
+    // Inquirer manages prompt lifecycle; no explicit teardown needed here.
   }
 }
 
@@ -243,14 +334,107 @@ class BufferedPromptDriver implements PromptDriver {
     private readonly output: NodeJS.WritableStream,
   ) {}
 
-  async ask(prompt: string): Promise<string> {
+  async input(options: TextPromptOptions): Promise<string> {
+    const defaultValue = options.defaultValue ?? "";
+    const label = formatBufferedPromptLabel(options.message, defaultValue);
+
+    while (true) {
+      const answer = this.readAnswer(label);
+      const candidate = (answer.trim() || defaultValue).trim();
+      if (options.required !== false && candidate.length === 0) {
+        this.output.write(`${options.message} is required.\n`);
+        continue;
+      }
+
+      const error = options.validator?.(candidate);
+      if (error) {
+        this.output.write(`${error}\n`);
+        continue;
+      }
+
+      return candidate;
+    }
+  }
+
+  async password(options: TextPromptOptions): Promise<string> {
+    const defaultValue = options.defaultValue ?? "";
+    const label = formatBufferedPromptLabel(options.message, defaultValue, {
+      defaultDisplay: defaultValue.length > 0 ? "(saved)" : "",
+    });
+
+    while (true) {
+      const answer = this.readAnswer(label);
+      const candidate = answer.length === 0 ? defaultValue : answer;
+      if (options.required !== false && candidate.length === 0) {
+        this.output.write(`${options.message} is required.\n`);
+        continue;
+      }
+
+      const error = options.validator?.(candidate);
+      if (error) {
+        this.output.write(`${error}\n`);
+        continue;
+      }
+
+      return candidate;
+    }
+  }
+
+  async confirm(options: ConfirmPromptOptions): Promise<boolean> {
+    const suffix = options.defaultValue ? "Y/n" : "y/N";
+
+    while (true) {
+      const answer = this.readAnswer(`${options.message} [${suffix}]: `).trim().toLowerCase();
+      if (!answer) {
+        return options.defaultValue;
+      }
+      if (["y", "yes"].includes(answer)) {
+        return true;
+      }
+      if (["n", "no"].includes(answer)) {
+        return false;
+      }
+      this.output.write("Please answer yes or no.\n");
+    }
+  }
+
+  async select<Value extends string>(options: SelectPromptOptions<Value>): Promise<Value> {
+    const choiceList = options.choices.map((choice) => choice.value).join("/");
+
+    while (true) {
+      const answer = this.readAnswer(`${options.message} [${choiceList}] (${options.defaultValue}): `).trim().toLowerCase();
+      if (!answer) {
+        return options.defaultValue;
+      }
+
+      const match = options.choices.find((choice) => {
+        return choice.value.toLowerCase() === answer || choice.label.trim().toLowerCase() === answer;
+      });
+      if (match) {
+        return match.value;
+      }
+
+      this.output.write(`Please choose one of: ${choiceList}.\n`);
+    }
+  }
+
+  close(): void {}
+
+  private readAnswer(prompt: string): string {
     const answer = this.answers[this.index] ?? "";
     this.index += 1;
     this.output.write(`${prompt}${answer}\n`);
     return answer;
   }
+}
 
-  close(): void {}
+function formatBufferedPromptLabel(
+  message: string,
+  defaultValue: string,
+  options: { defaultDisplay?: string } = {},
+): string {
+  const display = options.defaultDisplay ?? defaultValue;
+  return display ? `${message} [${display}]: ` : `${message}: `;
 }
 
 async function readBufferedAnswers(input: NodeJS.ReadableStream): Promise<string[]> {
@@ -272,12 +456,7 @@ async function createPromptDriver(
   output: NodeJS.WritableStream,
 ): Promise<PromptDriver> {
   if ("isTTY" in input && input.isTTY) {
-    return new ReadlinePromptDriver(
-      createInterface({
-        input,
-        output,
-      }),
-    );
+    return new InquirerPromptDriver(input, output);
   }
 
   return new BufferedPromptDriver(await readBufferedAnswers(input), output);
@@ -285,7 +464,6 @@ async function createPromptDriver(
 
 async function promptText(
   driver: PromptDriver,
-  ctx: PromptContext,
   label: string,
   defaultValue: string,
   options: {
@@ -294,46 +472,43 @@ async function promptText(
     normalize?: (value: string) => string;
   } = {},
 ): Promise<string> {
-  while (true) {
-    const answer = await driver.ask(`${label} [${defaultValue}]: `);
-    const candidate = (answer.trim() || defaultValue).trim();
+  const candidate = await driver.input({
+    message: label,
+    defaultValue,
+    required: options.required,
+    validator: options.validator,
+  });
+  return options.normalize ? options.normalize(candidate) : candidate;
+}
 
-    if (options.required !== false && candidate.length === 0) {
-      ctx.output.write(`${label} is required.\n`);
-      continue;
-    }
-
-    const error = options.validator?.(candidate);
-    if (error) {
-      ctx.output.write(`${error}\n`);
-      continue;
-    }
-
-    return options.normalize ? options.normalize(candidate) : candidate;
-  }
+async function promptPassword(
+  driver: PromptDriver,
+  label: string,
+  defaultValue: string,
+  options: {
+    required?: boolean;
+    validator?: (value: string) => string | null;
+    normalize?: (value: string) => string;
+  } = {},
+): Promise<string> {
+  const candidate = await driver.password({
+    message: label,
+    defaultValue,
+    required: options.required,
+    validator: options.validator,
+  });
+  return options.normalize ? options.normalize(candidate) : candidate;
 }
 
 async function promptYesNo(
   driver: PromptDriver,
-  ctx: PromptContext,
   label: string,
   defaultValue: boolean,
 ): Promise<boolean> {
-  const suffix = defaultValue ? "Y/n" : "y/N";
-
-  while (true) {
-    const answer = (await driver.ask(`${label} [${suffix}]: `)).trim().toLowerCase();
-    if (!answer) {
-      return defaultValue;
-    }
-    if (["y", "yes"].includes(answer)) {
-      return true;
-    }
-    if (["n", "no"].includes(answer)) {
-      return false;
-    }
-    ctx.output.write("Please answer yes or no.\n");
-  }
+  return driver.confirm({
+    message: label,
+    defaultValue,
+  });
 }
 
 function formatStep(index: number, total: number, title: string): string {
@@ -342,40 +517,46 @@ function formatStep(index: number, total: number, title: string): string {
 
 async function promptVaultSource(
   driver: PromptDriver,
-  ctx: PromptContext,
   defaultValue: VaultSource,
 ): Promise<VaultSource> {
-  const value = await promptText(driver, ctx, "VAULT_SOURCE (local/synology)", defaultValue, {
-    validator: (candidate) => {
-      try {
-        normalizeVaultSource(candidate);
-        return null;
-      } catch (error) {
-        return error instanceof Error ? error.message : String(error);
-      }
-    },
-    normalize: (candidate) => normalizeVaultSource(candidate),
+  return driver.select({
+    message: "VAULT_SOURCE",
+    defaultValue,
+    choices: [
+      {
+        value: "local",
+        label: "local",
+        description: "Read the vault directly from the local filesystem.",
+      },
+      {
+        value: "synology",
+        label: "synology",
+        description: "Download the vault from Synology NAS into a local cache.",
+      },
+    ],
   });
-  return value as VaultSource;
 }
 
 async function promptVaultHashMode(
   driver: PromptDriver,
-  ctx: PromptContext,
   defaultValue: "content" | "mtime",
 ): Promise<"content" | "mtime"> {
-  const value = await promptText(driver, ctx, "VAULT_HASH_MODE", defaultValue, {
-    validator: (candidate) => {
-      try {
-        parseVaultHashMode(candidate);
-        return null;
-      } catch (error) {
-        return error instanceof Error ? error.message : String(error);
-      }
-    },
-    normalize: (candidate) => parseVaultHashMode(candidate),
+  return driver.select({
+    message: "VAULT_HASH_MODE",
+    defaultValue,
+    choices: [
+      {
+        value: "content",
+        label: "content",
+        description: "Hash file content to detect changes.",
+      },
+      {
+        value: "mtime",
+        label: "mtime",
+        description: "Use modification time, recommended for remote Synology sync.",
+      },
+    ],
   });
-  return value as "content" | "mtime";
 }
 
 function canReadWrite(targetPath: string): boolean {
@@ -444,7 +625,7 @@ async function collectEmbeddingSettings(
   defaults: SetupValues,
   env: NodeJS.ProcessEnv,
 ): Promise<Pick<SetupValues, "embeddingEnabled" | "embeddingBaseUrl" | "embeddingApiKey" | "embeddingModel" | "embeddingDimensions">> {
-  const enabled = await promptYesNo(driver, ctx, "Enable semantic search with embeddings?", defaults.embeddingEnabled);
+  const enabled = await promptYesNo(driver, "Enable semantic search with embeddings?", defaults.embeddingEnabled);
   if (!enabled) {
     return {
       embeddingEnabled: false,
@@ -456,36 +637,26 @@ async function collectEmbeddingSettings(
   }
 
   while (true) {
-    const embeddingBaseUrl = await promptText(
-      driver,
-      ctx,
-      "EMBEDDING_BASE_URL",
-      defaults.embeddingBaseUrl ?? "https://api.openai.com/v1",
-      { validator: (value) => validateUrl(value, "EMBEDDING_BASE_URL") },
-    );
-    const embeddingApiKey = await promptText(
-      driver,
-      ctx,
-      "EMBEDDING_API_KEY",
-      defaults.embeddingApiKey ?? "",
-      { required: true },
-    );
+    const embeddingBaseUrl = await promptText(driver, "EMBEDDING_BASE_URL", defaults.embeddingBaseUrl ?? "https://api.openai.com/v1", {
+      validator: (value) => validateUrl(value, "EMBEDDING_BASE_URL"),
+    });
+    const embeddingApiKey = await promptPassword(driver, "EMBEDDING_API_KEY", defaults.embeddingApiKey ?? "", {
+      required: true,
+    });
     const embeddingModel = await promptText(
       driver,
-      ctx,
       "EMBEDDING_MODEL",
       defaults.embeddingModel ?? "text-embedding-3-small",
       { required: true },
     );
     const embeddingDimensions = await promptText(
       driver,
-      ctx,
       "EMBEDDING_DIMENSIONS",
       defaults.embeddingDimensions ?? "384",
       { validator: (value) => validateNonNegativeInteger(value, "EMBEDDING_DIMENSIONS") },
     );
 
-    const shouldProbe = await promptYesNo(driver, ctx, "Probe the embedding endpoint now?", false);
+    const shouldProbe = await promptYesNo(driver, "Probe the embedding endpoint now?", false);
     if (shouldProbe) {
       try {
         const probeEnv = {
@@ -504,7 +675,7 @@ async function collectEmbeddingSettings(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         ctx.output.write(`Embedding probe failed: ${message}\n`);
-        if (await promptYesNo(driver, ctx, "Re-enter embedding settings?", true)) {
+        if (await promptYesNo(driver, "Re-enter embedding settings?", true)) {
           continue;
         }
       }
@@ -527,7 +698,6 @@ async function collectAgentSettings(
 ): Promise<Pick<SetupValues, "agentEnabled" | "agentBaseUrl" | "agentApiKey" | "agentModel" | "agentBatchSize">> {
   const enabled = await promptYesNo(
     driver,
-    ctx,
     "Enable automatic vault-to-wiki processing?",
     defaults.agentEnabled,
   );
@@ -545,28 +715,19 @@ async function collectAgentSettings(
     agentEnabled: true,
     agentBaseUrl: await promptText(
       driver,
-      ctx,
       "WIKI_AGENT_BASE_URL",
       defaults.agentBaseUrl ?? "https://api.openai.com/v1",
       { validator: (value) => validateUrl(value, "WIKI_AGENT_BASE_URL") },
     ),
-    agentApiKey: await promptText(
-      driver,
-      ctx,
-      "WIKI_AGENT_API_KEY",
-      defaults.agentApiKey ?? "",
-      { required: true },
-    ),
+    agentApiKey: await promptPassword(driver, "WIKI_AGENT_API_KEY", defaults.agentApiKey ?? "", { required: true }),
     agentModel: await promptText(
       driver,
-      ctx,
       "WIKI_AGENT_MODEL",
       defaults.agentModel ?? "",
       { required: true },
     ),
     agentBatchSize: await promptText(
       driver,
-      ctx,
       "WIKI_AGENT_BATCH_SIZE",
       defaults.agentBatchSize ?? "5",
       { validator: (value) => validateNonNegativeInteger(value, "WIKI_AGENT_BATCH_SIZE") },
@@ -584,28 +745,21 @@ async function collectSynologySettings(
 >> {
   const synologyBaseUrl = await promptText(
     driver,
-    ctx,
     "SYNOLOGY_BASE_URL",
     defaults.synologyBaseUrl ?? "https://nas.example.com:5001",
     { validator: (value) => validateUrl(value, "SYNOLOGY_BASE_URL") },
   );
   const synologyUsername = await promptText(
     driver,
-    ctx,
     "SYNOLOGY_USERNAME",
     defaults.synologyUsername ?? "",
     { required: true },
   );
-  const synologyPassword = await promptText(
-    driver,
-    ctx,
-    "SYNOLOGY_PASSWORD",
-    defaults.synologyPassword ?? "",
-    { required: true },
-  );
+  const synologyPassword = await promptPassword(driver, "SYNOLOGY_PASSWORD", defaults.synologyPassword ?? "", {
+    required: true,
+  });
   const synologyRemotePath = await promptText(
     driver,
-    ctx,
     "VAULT_SYNOLOGY_REMOTE_PATH",
     defaults.synologyRemotePath ?? "/homes/user/wiki-vault",
     {
@@ -620,9 +774,9 @@ async function collectSynologySettings(
       normalize: (value) => normalizeSynologyRemotePath(value),
     },
   );
-  const vaultHashMode = await promptVaultHashMode(driver, ctx, "mtime");
-  const synologyVerifySsl = await promptYesNo(driver, ctx, "SYNOLOGY_VERIFY_SSL", defaults.synologyVerifySsl);
-  const synologyReadonly = await promptYesNo(driver, ctx, "SYNOLOGY_READONLY", defaults.synologyReadonly);
+  const vaultHashMode = await promptVaultHashMode(driver, "mtime");
+  const synologyVerifySsl = await promptYesNo(driver, "SYNOLOGY_VERIFY_SSL", defaults.synologyVerifySsl);
+  const synologyReadonly = await promptYesNo(driver, "SYNOLOGY_READONLY", defaults.synologyReadonly);
 
   return {
     vaultHashMode,
@@ -648,7 +802,6 @@ async function collectParserSkillSettings(
   for (const skill of OPTIONAL_PARSER_SKILLS) {
     const enabled = await promptYesNo(
       driver,
-      ctx,
       `Install parser skill ${skill.name} (${skill.summary})?`,
       selected.has(skill.name),
     );
@@ -765,35 +918,34 @@ export async function runSetupWizard(
 
   try {
     writeSection(output, "Step 1: Configuration file");
-    const envFilePath = await promptText(driver, ctx, "Path for the generated .wiki.env file", defaults.envFilePath, {
+    const envFilePath = await promptText(driver, "Path for the generated .wiki.env file", defaults.envFilePath, {
       normalize: (value) => resolveInputPath(value, cwd),
     });
 
     writeSection(output, "Step 2: Vault source");
-    const vaultSource = await promptVaultSource(driver, ctx, defaults.vaultSource);
+    const vaultSource = await promptVaultSource(driver, defaults.vaultSource);
     const totalSteps = vaultSource === "synology" ? 9 : 8;
 
     writeSection(output, formatStep(3, totalSteps, "Core paths"));
-    const wikiPath = await promptText(driver, ctx, "WIKI_PATH", defaults.wikiPath, {
+    const wikiPath = await promptText(driver, "WIKI_PATH", defaults.wikiPath, {
       normalize: (value) => resolveInputPath(value, cwd),
       validator: (value) => validateWikiPath(resolveInputPath(value, cwd)),
     });
     const vaultPath = await promptText(
       driver,
-      ctx,
       vaultSource === "synology" ? "VAULT_PATH (local cache directory)" : "VAULT_PATH",
       defaults.vaultPath,
       {
         normalize: (value) => resolveInputPath(value, cwd),
       },
     );
-    const dbPath = await promptText(driver, ctx, "WIKI_DB_PATH", defaults.dbPath, {
+    const dbPath = await promptText(driver, "WIKI_DB_PATH", defaults.dbPath, {
       normalize: (value) => resolveInputPath(value, cwd),
     });
-    const configPath = await promptText(driver, ctx, "WIKI_CONFIG_PATH", defaults.configPath, {
+    const configPath = await promptText(driver, "WIKI_CONFIG_PATH", defaults.configPath, {
       normalize: (value) => resolveInputPath(value, cwd),
     });
-    const templatesPath = await promptText(driver, ctx, "WIKI_TEMPLATES_PATH", defaults.templatesPath, {
+    const templatesPath = await promptText(driver, "WIKI_TEMPLATES_PATH", defaults.templatesPath, {
       normalize: (value) => resolveInputPath(value, cwd),
     });
 
@@ -818,7 +970,7 @@ export async function runSetupWizard(
     }
 
     writeSection(output, formatStep(vaultSource === "synology" ? 5 : 4, totalSteps, "Sync schedule"));
-    const syncInterval = await promptText(driver, ctx, "WIKI_SYNC_INTERVAL (seconds)", defaults.syncInterval, {
+    const syncInterval = await promptText(driver, "WIKI_SYNC_INTERVAL (seconds)", defaults.syncInterval, {
       validator: (value) => validateNonNegativeInteger(value, "WIKI_SYNC_INTERVAL"),
     });
 
@@ -848,7 +1000,7 @@ export async function runSetupWizard(
 
     writeSection(output, formatStep(totalSteps, totalSteps, "Confirm"));
     output.write(`${buildSetupSummary(values)}\n`);
-    const confirmed = await promptYesNo(driver, ctx, "Write configuration and scaffold workspace assets?", true);
+    const confirmed = await promptYesNo(driver, "Write configuration and scaffold workspace assets?", true);
     if (!confirmed) {
       throw new AppError("Setup aborted before writing any files.", "runtime");
     }

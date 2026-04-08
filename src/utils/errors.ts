@@ -14,12 +14,19 @@ export class AppError extends Error {
   }
 }
 
+function isPromptAbortError(error: Error): boolean {
+  return error.name === "ExitPromptError" || error.message.startsWith("User force closed the prompt");
+}
+
 export function asAppError(error: unknown): AppError {
   if (error instanceof AppError) {
     return error;
   }
 
   if (error instanceof Error) {
+    if (isPromptAbortError(error)) {
+      return new AppError("Prompt cancelled by user.", "runtime");
+    }
     return new AppError(error.message, "runtime");
   }
 

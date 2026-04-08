@@ -43,6 +43,7 @@
     "@antv/g6": "^5.1.0",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
+    "@inquirer/prompts": "^7.10.1",
     "@openai/codex-sdk": "^0.118.0",
     "adm-zip": "^0.5.17",
     "better-sqlite3": "^12.8.0",
