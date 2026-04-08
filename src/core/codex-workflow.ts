@@ -52,11 +52,31 @@ function normalizeEnv(input: CodexWorkflowInput): Record<string, string> {
 
 function createCodexClient(input: CodexWorkflowInput): Codex {
   const env = normalizeEnv(input);
+  const baseUrl = input.env?.WIKI_AGENT_BASE_URL?.trim();
+  const apiKey = input.env?.WIKI_AGENT_API_KEY?.trim();
+
   const options: CodexOptions = {
-    apiKey: input.env?.WIKI_AGENT_API_KEY?.trim() || undefined,
-    baseUrl: input.env?.WIKI_AGENT_BASE_URL?.trim() || undefined,
+    apiKey: apiKey || undefined,
     env,
   };
+
+  if (baseUrl) {
+    // Define a custom model_provider to override any global ~/.codex/config.toml settings.
+    // The SDK's `baseUrl` option maps to `openai_base_url` which gets overridden by
+    // model_provider; using `config` directly avoids this precedence issue.
+    options.config = {
+      model_provider: "wiki-agent",
+      model_providers: {
+        "wiki-agent": {
+          name: "wiki-agent",
+          base_url: baseUrl,
+          wire_api: "responses",
+          experimental_bearer_token: apiKey || "",
+        },
+      },
+    };
+  }
+
   return new Codex(options);
 }
 
