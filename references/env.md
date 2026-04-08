@@ -1,97 +1,122 @@
 # Environment Variables
 
-## Required
+All configuration is managed through `.wiki.env` (created by `wiki setup`). Variables can also be set in shell environment or a `.env` file.
 
-The CLI loads configuration in this order:
+---
 
-1. existing `process.env`
-2. explicit `WIKI_ENV_FILE`
-3. nearest auto-discovered `.wiki.env` in the current working directory or its parents
+## Core
 
-`wiki setup` writes a `.wiki.env` file that follows this contract. Real process env vars still win over file values.
-The same setup flow also installs workspace-local skills under `workspace/.agents/skills/`.
-
-| Variable | Description | Example |
+| Variable | Required | Description |
 | --- | --- | --- |
-| `WIKI_ENV_FILE` | Optional path to a `.wiki.env` file to load before resolving runtime paths | `/data/workspace/.wiki.env` |
-| `WIKI_PATH` | Absolute path to `wiki/pages/` | `/data/workspace/wiki/pages` |
+| `WIKI_PATH` | Yes | Path to the Markdown pages directory |
+| `WIKI_DB_PATH` | Yes | Path to the SQLite index database |
+| `WIKI_CONFIG_PATH` | Yes | Path to `wiki.config.json` |
+| `WIKI_TEMPLATES_PATH` | Yes | Path to the templates directory |
+| `WIKI_SYNC_INTERVAL` | No | Auto-sync interval in seconds (default: `86400`) |
 
-## Core Optional Paths
+## Vault
 
-| Variable | Default | Description |
+| Variable | Required | Description |
 | --- | --- | --- |
-| `VAULT_PATH` | sibling `../vault` next to `WIKI_PATH` | Absolute path to the vault directory. In Synology mode this becomes the local cache directory. |
-| `WIKI_DB_PATH` | `WIKI_PATH/../index.db` | SQLite index database path |
-| `WIKI_CONFIG_PATH` | `WIKI_PATH/../wiki.config.json` | Runtime config file path |
-| `WIKI_TEMPLATES_PATH` | `WIKI_PATH/../templates` | Runtime template directory |
-| `WIKI_SYNC_INTERVAL` | `86400` | Daemon sync interval in seconds |
+| `VAULT_PATH` | Yes | Path to the local vault directory |
+| `VAULT_SOURCE` | Yes | Vault source type (`local` or `synology`) |
+| `VAULT_HASH_MODE` | No | Hash mode for change detection (`content` or `mtime`, default: `mtime`) |
+| `VAULT_SYNOLOGY_REMOTE_PATH` | If `synology` | Remote path on Synology NAS |
 
-## Workspace Skills
+## Synology (when `VAULT_SOURCE=synology`)
 
-`wiki setup` always installs `wiki-skill` into `workspace/.agents/skills/wiki-skill`.
-If you opt into parser skills during setup, they are installed into the same workspace-local skills directory and recorded in `.wiki.env`.
-
-| Variable | Default | Description |
+| Variable | Required | Description |
 | --- | --- | --- |
-| `WIKI_PARSER_SKILLS` | empty | Comma-separated optional parser skills selected during `wiki setup`, such as `pdf,docx`; `wiki doctor` uses this to verify expected workspace-local parser skills |
+| `SYNOLOGY_BASE_URL` | Yes | Synology DSM base URL |
+| `SYNOLOGY_USERNAME` | Yes | DSM username |
+| `SYNOLOGY_PASSWORD` | Yes | DSM password |
+| `SYNOLOGY_VERIFY_SSL` | No | Verify SSL certificates (default: `true`) |
+| `SYNOLOGY_READONLY` | No | Read-only mode (default: `false`) |
 
 ## Embedding
 
-When any required embedding variable is missing, `wiki sync` skips vector generation and `wiki search` returns a `not_configured` error.
-
-| Variable | Default | Description |
+| Variable | Required | Description |
 | --- | --- | --- |
-| `EMBEDDING_BASE_URL` | none | OpenAI-compatible embedding API base URL |
-| `EMBEDDING_API_KEY` | none | Embedding API key |
-| `EMBEDDING_MODEL` | none | Embedding model name |
-| `EMBEDDING_DIMENSIONS` | `384` | Vector dimension for `vec_pages` |
+| `EMBEDDING_BASE_URL` | Yes | Embedding API base URL |
+| `EMBEDDING_API_KEY` | Yes | Embedding API key |
+| `EMBEDDING_MODEL` | Yes | Embedding model name |
+| `EMBEDDING_DIMENSIONS` | No | Vector dimensions (default: model-dependent) |
 
-### Smoke-test fallback
+## Agent (Agentic Workflow)
 
-For local smoke tests, the implementation also accepts these fallback variables when the `EMBEDDING_*` trio is absent:
+The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to process vault items. When `WIKI_AGENT_BASE_URL` is set, a custom `model_provider` is injected to override any global `~/.codex/config.toml` settings, ensuring requests go to the correct endpoint.
 
-- `OPENROUTER_BASE_URL`
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_EMBEDDING_MODEL`
-
-These are for development convenience only. The portable contract remains `EMBEDDING_*`.
-
-## Automatic Vault Processing
-
-These variables control the service-layer queue processor.
-
-| Variable | Default | Description |
+| Variable | Required | Description |
 | --- | --- | --- |
-| `WIKI_AGENT_ENABLED` | `false` | Enable automatic vault-to-wiki processing after full sync cycles |
-| `WIKI_AGENT_BASE_URL` | `https://api.openai.com/v1` | Optional Codex/OpenAI API base URL override for the workflow runner |
-| `WIKI_AGENT_API_KEY` | none | API key used by the Codex workflow runner |
-| `WIKI_AGENT_MODEL` | none | Model name used by the Codex workflow runner |
-| `WIKI_AGENT_BATCH_SIZE` | `5` | Max queue items processed per cycle |
-| `WIKI_AGENT_BACKEND` | `codex-workflow` | Queue execution backend; `codex-workflow` is the supported production path |
-| `WIKI_AGENT_ALLOW_TEMPLATE_EVOLUTION` | `false` | Allow the workflow to apply template/type creation actions instead of proposal-only behavior |
-| `WIKI_AGENT_TEMPLATE_EVOLUTION_MODE` | `proposal` | `proposal` or `apply`; only `apply` permits `create_template` actions to be accepted |
+| `WIKI_AGENT_ENABLED` | No | Enable agentic workflow (`true` / `false`, default: `false`) |
+| `WIKI_AGENT_BASE_URL` | No | LLM API base URL (e.g. `https://api.openai.com/v1`). When set, overrides global Codex config |
+| `WIKI_AGENT_API_KEY` | If enabled | API key for the LLM provider |
+| `WIKI_AGENT_MODEL` | No | Model name (e.g. `gpt-5.4`, `Qwen/Qwen3.5-397B-A17B-GPTQ-Int4`) |
+| `WIKI_AGENT_BATCH_SIZE` | No | Max concurrent vault items per batch (default: `5`) |
+| `WIKI_PARSER_SKILLS` | No | Comma-separated parser skill list (e.g. `pdf,docx,pptx,xlsx`) |
 
-Validation:
-- if `WIKI_AGENT_ENABLED=false`, missing agent credentials are ignored
-- if `WIKI_AGENT_ENABLED=true`, `WIKI_AGENT_API_KEY` and `WIKI_AGENT_MODEL` are required
+### OpenAI (default)
 
-## NAS / Synology
+No special setup required. Set `WIKI_AGENT_BASE_URL` to `https://api.openai.com/v1` (or leave empty) and provide your API key.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `VAULT_SOURCE` | `local` | `local` or `synology` |
-| `VAULT_HASH_MODE` | `content` | `content` hashes full file bytes; `mtime` hashes `path + size + mtime` |
-| `VAULT_SYNOLOGY_REMOTE_PATH` | none | Remote Synology vault path such as `/homes/user/vault` |
-| `SYNOLOGY_BASE_URL` | none | Synology DSM base URL such as `https://nas.example.com:5001` |
-| `SYNOLOGY_USERNAME` | none | Synology DSM username |
-| `SYNOLOGY_PASSWORD` | none | Synology DSM password |
-| `SYNOLOGY_VERIFY_SSL` | `true` | Whether to verify DSM TLS certificates |
-| `SYNOLOGY_READONLY` | `false` | Read-only policy flag stored for future mutation safety; `wiki setup` defaults it to `true` |
+```env
+WIKI_AGENT_ENABLED=true
+WIKI_AGENT_API_KEY=sk-...
+WIKI_AGENT_MODEL=gpt-5.4
+```
 
-Behavior:
-- `VAULT_SOURCE=local`: scan the local vault path directly
-- `VAULT_SOURCE=synology`: poll Synology File Station for file metadata and use `VAULT_PATH` as the local cache directory for downloaded files
-- `VAULT_HASH_MODE=mtime`: preferred for large mounted vaults or slow NAS storage
-- `VAULT_HASH_MODE=content`: preferred when exact byte-level change detection matters more than scan cost
-- `wiki setup` can now write the full Synology block step by step
-- `wiki doctor --probe` validates Synology credentials and performs a lightweight NAS connectivity probe
+### vLLM
+
+vLLM can serve as a self-hosted LLM provider via its OpenAI-compatible API. Wiki's agentic workflow communicates through the [Responses API](https://platform.openai.com/docs/api-reference/responses) (`/v1/responses`), which requires vLLM **v0.8.5+**.
+
+```env
+WIKI_AGENT_ENABLED=true
+WIKI_AGENT_BASE_URL=http://<host>:<port>/v1
+WIKI_AGENT_API_KEY=<your-token>
+WIKI_AGENT_MODEL=Qwen/Qwen3.5-397B-A17B-GPTQ-Int4
+```
+
+#### Chat template: `developer` role support
+
+The Codex CLI sends `developer`-role messages (the OpenAI equivalent of `system` that can appear mid-conversation). Most model chat templates only recognize `system`, `user`, `assistant`, and `tool` — they will reject `developer` with:
+
+```
+400 Bad Request: "Unexpected message role."
+```
+
+**Fix:** Use a modified chat template that maps `developer` → `system`. A ready-to-use template for Qwen3.5 is included at:
+
+```
+assets/vllm/qwen3_5_openai_developer.jinja
+```
+
+Launch vLLM with the custom template:
+
+```bash
+vllm serve <model> \
+  --chat-template /path/to/qwen3_5_openai_developer.jinja \
+  --port 7730
+```
+
+The template is derived from the official Qwen3.5 template with a single semantic change: `developer` messages are treated as `system` messages. Key modifications:
+
+1. **Instruction prefix detection** — counts both `system` and `developer` at the start of the conversation (line 56)
+2. **Role normalization** — `developer` → `system` throughout the conversation loop (lines 111, 160, 166)
+
+> For other model families (LLaMA, Mistral, etc.), apply the same pattern: find `message.role == "system"` checks in the template and extend them to also match `"developer"`.
+
+#### Verifying vLLM compatibility
+
+```bash
+# Test the /v1/responses endpoint directly
+curl -s http://<host>:<port>/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "model": "<model-name>",
+    "input": "Say hello.",
+    "reasoning": {"effort": "low"}
+  }' | head -c 500
+```
+
+A successful response returns a JSON object with `output` containing the model's reply.
