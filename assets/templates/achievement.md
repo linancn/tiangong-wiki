@@ -15,18 +15,18 @@ issuer:
 verifiable: "yes"
 ---
 
-## 成就描述
+## What
 
-简洁但具体地写出这项成就是什么，以及它代表了什么结果。
+State the achievement in one factual sentence. Include the scope, level, and issuing context. Do not editorialize — let the facts speak.
 
-## 获得过程
+## How
 
-说明获得这项成就经历了哪些关键步骤、难点和投入，而不是只写最终结果。
+Describe the key steps, investment, and challenges involved in earning this achievement. Focus on what is quantifiable or verifiable: duration, scale, constraints overcome. Do not write a narrative essay.
 
-## 能力体现
+## Demonstrated Capabilities
 
-解释这项成就证明了哪些能力、经验或可信度，方便后续被 resume 或 profile 引用。
+List the specific capabilities this achievement provides evidence for. Use terms that other pages (resume, person) can reference. Think of this as a reusable capability tag set.
 
-## 证明材料
+## Evidence
 
-列出证书、链接、发布记录、截图或其他可核验证据，并同步到 sourceRefs。
+Provide verifiable proof: certificate links, publication URLs, official records, screenshots, or third-party references. If the achievement claims to be verifiable (frontmatter `verifiable: "yes"`), this section must contain at least one checkable item.

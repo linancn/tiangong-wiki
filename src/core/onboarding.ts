@@ -1028,6 +1028,7 @@ export async function runSetupWizard(
       [
         "\ntiangong-wiki setup complete",
         `configuration file: ${values.envFilePath}`,
+        `workspace root: ${workspaceRoot}`,
         `skills root: ${skillsRoot}`,
         `tiangong-wiki-skill: ${wikiSkillInstall.status}`,
         `parser skills: ${values.parserSkills.length > 0 ? values.parserSkills.join(", ") : "(none)"}`,
@@ -1039,6 +1040,9 @@ export async function runSetupWizard(
           : []),
         "",
         "Next steps:",
+        `- Run subsequent commands from the workspace root that contains .wiki.env: ${workspaceRoot}`,
+        `- Example: cd ${JSON.stringify(workspaceRoot)} && tiangong-wiki doctor`,
+        `- Example: cd ${JSON.stringify(workspaceRoot)} && tiangong-wiki init`,
         "- Run `tiangong-wiki doctor` to validate the generated configuration.",
         "- Run `tiangong-wiki init` to create index.db and perform the first sync.",
         ...(values.vaultSource === "synology"

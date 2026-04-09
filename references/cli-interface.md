@@ -201,11 +201,13 @@ Output: `{ created, filePath }`.
 ```
 tiangong-wiki template list [--format text|json]
 tiangong-wiki template show <pageType> [--format text|json]
+tiangong-wiki template lint [pageType] [--level error|warning|info] [--format text|json]
 tiangong-wiki template create --type <pageType> --title <title>
 ```
 
 - `list` — Show registered templates
 - `show` — Display template content for a specific type
+- `lint` — Validate template frontmatter, schema declarations, summaryFields, and minimum body structure
 - `create` — Generate a new template file in `wiki/templates/` and register it in `wiki.config.json`
 
 ### type

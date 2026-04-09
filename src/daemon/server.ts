@@ -45,6 +45,7 @@ import {
   showTemplate,
   showType,
 } from "../operations/type-template.js";
+import { runTemplateLint } from "../operations/template-lint.js";
 import { createPage, runSync, runSyncCommand } from "../operations/write.js";
 import type { DaemonLaunchMode, DaemonState, DaemonTask } from "../types/page.js";
 import { AppError, asAppError } from "../utils/errors.js";
@@ -981,6 +982,18 @@ export async function runDaemonServer(options: {
           throw new AppError("pageType is required", "config");
         }
         writeJsonResponse(response, 200, showTemplate(env, pageType));
+        return;
+      }
+
+      if (method === "GET" && pathname === "/template/lint") {
+        writeJsonResponse(
+          response,
+          200,
+          runTemplateLint(env, {
+            pageType: url.searchParams.get("pageType") ?? undefined,
+            level: url.searchParams.get("level") ?? undefined,
+          }),
+        );
         return;
       }
 

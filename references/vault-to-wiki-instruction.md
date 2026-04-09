@@ -22,7 +22,8 @@ Do not assume any page type is the default destination.
 4. Skip transient, duplicate, or low-value files.
 5. Preserve provenance with `sourceRefs` and any type-specific source fields already defined by the chosen template.
 6. `sourceRefs` may only contain existing wiki page ids. Do not put raw vault file paths there; keep raw file provenance in the page body or a dedicated source field such as `vaultPath` when the chosen type supports it.
-7. If the existing type system cannot represent the knowledge cleanly, prefer `propose_only` unless template evolution is explicitly allowed.
+7. Only write type-specific frontmatter fields that are declared by the chosen type in `tiangong-wiki type show <type>` or the template file. Do not invent ad-hoc fields.
+8. If the existing type system cannot represent the knowledge cleanly, prefer `propose_only` unless template evolution is explicitly allowed.
 
 ## Runtime Discovery
 

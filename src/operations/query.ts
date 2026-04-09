@@ -12,7 +12,7 @@ import type { LoadedWikiConfig } from "../types/config.js";
 import type { LintItem, LintResult, VaultQueueStatus } from "../types/page.js";
 import { camelToSnake } from "../utils/case.js";
 import { AppError } from "../utils/errors.js";
-import { listFilesRecursiveSync } from "../utils/fs.js";
+import { listFilesRecursiveSync, pathExistsSync } from "../utils/fs.js";
 import { normalizeFtsQuery } from "../utils/segmenter.js";
 
 type Direction = "outgoing" | "incoming" | "both";
@@ -823,6 +823,26 @@ export function runLint(
           "unregistered_fields",
           `Unregistered fields: ${page.unregisteredFields.join(", ")}`,
         );
+      }
+
+      // Check for broken image references in page body
+      const imageRefPattern = /!\[[^\]]*\]\(([^)]+)\)/g;
+      let imageMatch;
+      while ((imageMatch = imageRefPattern.exec(page.body)) !== null) {
+        let refPath = imageMatch[1].trim();
+        // Strip optional markdown title: ![alt](path "title")
+        const titleMatch = refPath.match(/^(\S+)\s+"[^"]*"$/);
+        if (titleMatch) refPath = titleMatch[1];
+        // Skip non-local references
+        if (!refPath || refPath.startsWith("http://") || refPath.startsWith("https://")
+            || refPath.startsWith("data:") || refPath.startsWith("#")) continue;
+        // Decode URL-encoded paths (e.g., %20 → space)
+        try { refPath = decodeURIComponent(refPath); } catch { /* use as-is */ }
+        // Resolve relative to the page file's directory
+        const absRefPath = path.resolve(path.dirname(filePath), refPath);
+        if (!pathExistsSync(absRefPath)) {
+          addLintItem(result.warnings, page.page.id, "broken_image_ref", `Image not found: ${refPath}`);
+        }
       }
     }
 

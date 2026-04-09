@@ -1,6 +1,7 @@
 import { Command } from "commander";
 
 import { executeServerBackedOperation, requestDaemonJson } from "../daemon/client.js";
+import { renderTemplateLintResult, runTemplateLint } from "../operations/template-lint.js";
 import { createTemplate, listTemplates, showTemplate } from "../operations/type-template.js";
 import { ensureTextOrJson, writeJson, writeText } from "../utils/output.js";
 
@@ -54,6 +55,40 @@ export function registerTemplateCommand(program: Command): void {
       }
 
       writeText(String(payload.content ?? ""));
+    });
+
+  template
+    .command("lint")
+    .argument("[pageType]", "Optional pageType to lint")
+    .option("--level <level>", "error, warning, or info", "info")
+    .option("--format <format>", "Output format: text or json", "text")
+    .action(async (pageType, options) => {
+      const format = ensureTextOrJson(options.format);
+      const payload = await executeServerBackedOperation({
+        kind: "read",
+        local: () =>
+          runTemplateLint(process.env, {
+            pageType: typeof pageType === "string" ? pageType : undefined,
+            level: options.level ?? undefined,
+          }),
+        remote: (endpoint) =>
+          requestDaemonJson({
+            endpoint,
+            method: "GET",
+            path: "/template/lint",
+            query: {
+              pageType: typeof pageType === "string" ? pageType : undefined,
+              level: options.level ?? undefined,
+            },
+          }),
+      });
+
+      if (format === "json") {
+        writeJson(payload);
+        return;
+      }
+
+      writeText(renderTemplateLintResult(payload));
     });
 
   template

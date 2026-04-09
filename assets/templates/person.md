@@ -14,18 +14,18 @@ context:
 contact:
 ---
 
-## 基本信息
+## Identity & Role
 
-写清楚这个人的身份、角色、与你的关系以及为什么值得长期记录。
+State this person's name, professional role, organization, and domain expertise. Focus on facts that make this person a reusable knowledge node — not personal relationship notes.
 
-## 共事内容
+## Context & Collaboration
 
-说明你们在哪些项目、主题或情境中有过协作、交流或影响。
+Describe the projects, domains, or initiatives where this person is relevant. Link to existing wiki pages for shared projects or topics. This section should help graph traversal — a reader should understand why this person node connects to other knowledge.
 
-## 从他/她那学到的
+## Key Contributions
 
-记录这个人带来的关键认知、做事方式、提醒或可复用的经验。
+Record this person's notable contributions, decisions, or expertise that are valuable beyond a single interaction. Write facts and outcomes, not impressions. If contributions are significant enough, they should be separate achievement pages linked via relatedPages.
 
-## 备忘
+## Notes
 
-写下未来互动时需要记住的事项，例如偏好、待跟进事项或联系线索。
+Brief factual notes for future reference: contact preferences, scheduling constraints, areas of ongoing work. Keep this minimal — this is not a personal diary entry.

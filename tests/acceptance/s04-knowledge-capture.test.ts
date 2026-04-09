@@ -60,8 +60,8 @@ prerequisites: []
     );
     expect(created.created.startsWith("concepts/")).toBe(true);
     expect(created.created.endsWith(".md")).toBe(true);
-    expect(readFile(created.filePath)).toContain("## 核心理解");
-    expect(readFile(created.filePath)).toContain("## 关键公式/定义");
+    expect(readFile(created.filePath)).toContain("## Definition");
+    expect(readFile(created.filePath)).toContain("## Formal Specification");
 
     writePage(
       workspace,

@@ -11,24 +11,25 @@ createdAt: 2026-04-06
 updatedAt: 2026-04-06
 targetAudience:
 lastReviewedAt:
+vaultPath:
 ---
 
-## 基本信息
+## Positioning
 
-先写出这份 resume 面向谁、主打什么定位，以及希望读者一眼记住什么。
+State the target audience for this resume and the core professional identity in one sentence. What should the reader remember after 10 seconds?
 
-## 教育/工作背景
+## Education & Work Background
 
-按与你的目标最相关的顺序整理教育、工作或长期项目背景，而不是机械罗列。
+List education and work history in order of relevance to the target audience, not chronological order. Keep entries factual — institution, role, duration, key focus. Do not expand into narratives here.
 
-## 核心技能
+## Core Skills
 
-写出最能支撑当前目标 audience 的技能、能力证据和熟练程度。
+List skills with evidence of proficiency. For each skill, either link to a wiki page that demonstrates it or note the context where it was applied. Do not list skills without supporting evidence.
 
-## 项目经历
+## Selected Projects
 
-挑选最有代表性的项目，说明问题、动作、结果以及你的具体贡献。
+Choose the most representative projects. For each: state the problem, your specific role, the action taken, and the measurable outcome. If a project has its own wiki page, link to it rather than repeating the description here.
 
-## 荣誉与成就
+## Honors & Achievements
 
-汇总最能增强可信度的 achievement、奖项、认证或公开证明材料。
+Reference existing achievement pages via relatedPages where possible. For items not yet captured as achievement pages, provide a one-line summary with verifiable evidence (certificate, publication, link).

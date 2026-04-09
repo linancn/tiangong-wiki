@@ -76,6 +76,133 @@ describe("wiki type commands", () => {
     );
   });
 
+  it("registers template fields that appear in default source-summary, method, and resume templates", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    runCliJson(["init"], workspace.env);
+
+    const sourceSummary = runCliJson<{
+      columns: Record<string, string>;
+      summaryFields: string[];
+    }>(["type", "show", "source-summary", "--format", "json"], workspace.env);
+    const method = runCliJson<{
+      columns: Record<string, string>;
+      summaryFields: string[];
+    }>(["type", "show", "method", "--format", "json"], workspace.env);
+    const resume = runCliJson<{
+      columns: Record<string, string>;
+      summaryFields: string[];
+    }>(["type", "show", "resume", "--format", "json"], workspace.env);
+
+    expect(sourceSummary.columns).toEqual(
+      expect.objectContaining({
+        sourceType: "text",
+        vaultPath: "text",
+        keyFindings: "text",
+      }),
+    );
+    expect(sourceSummary.summaryFields).toEqual(expect.arrayContaining(["keyFindings"]));
+
+    expect(method.columns).toEqual(
+      expect.objectContaining({
+        domain: "text",
+        effectiveness: "text",
+        applicableTo: "text",
+      }),
+    );
+    expect(method.summaryFields).toEqual(expect.arrayContaining(["applicableTo"]));
+
+    expect(resume.columns).toEqual(
+      expect.objectContaining({
+        targetAudience: "text",
+        lastReviewedAt: "text",
+        vaultPath: "text",
+      }),
+    );
+
+    writePage(
+      workspace,
+      "source-summaries/aligned.md",
+      `---
+pageType: source-summary
+title: Aligned Source Summary
+nodeId: aligned-source-summary
+status: active
+visibility: private
+sourceRefs: []
+relatedPages: []
+tags: []
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+sourceType: pdf
+vaultPath: imports/aligned.pdf
+keyFindings:
+  - one
+---
+
+Aligned source summary body.
+`,
+    );
+    writePage(
+      workspace,
+      "methods/aligned.md",
+      `---
+pageType: method
+title: Aligned Method
+nodeId: aligned-method
+status: active
+visibility: shared
+sourceRefs: []
+relatedPages: []
+tags: []
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+domain: research
+effectiveness: medium
+applicableTo:
+  - literature-review
+---
+
+Aligned method body.
+`,
+    );
+    writePage(
+      workspace,
+      "resumes/aligned.md",
+      `---
+pageType: resume
+title: Aligned Resume
+nodeId: aligned-resume
+status: draft
+visibility: private
+sourceRefs: []
+relatedPages: []
+tags: []
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+targetAudience: hiring-manager
+lastReviewedAt: 2026-04-06
+vaultPath: imports/resume.pdf
+---
+
+Aligned resume body.
+`,
+    );
+
+    runCliJson(["sync"], workspace.env);
+    const lint = runCliJson<{
+      info: Array<{ check: string; page: string }>;
+    }>(["lint", "--format", "json"], workspace.env);
+
+    expect(
+      lint.info.filter(
+        (item) =>
+          item.check === "unregistered_fields" &&
+          ["source-summaries/aligned.md", "methods/aligned.md", "resumes/aligned.md"].includes(item.page),
+      ),
+    ).toEqual([]);
+  });
+
   it("recommends types from existing page embeddings instead of hardcoded hints", async () => {
     const server = await startEmbeddingServer({
       dimensions: 4,

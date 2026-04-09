@@ -14,18 +14,18 @@ severity: medium
 actionable: "yes"
 ---
 
-## 发生了什么
+## Event
 
-按事实顺序描述事件经过、背景条件和真正触发结果的关键节点。
+Describe what happened — only the facts that are necessary to understand the lesson. Do not write a chronological narrative; keep only the causal chain that led to the outcome.
 
-## 从中学到了什么
+## Stable Rule
 
-提炼这次事件留下的稳定认知，而不是只重复事件本身。
+State the durable insight extracted from this event. This should be a general rule or principle that applies beyond this specific incident. If you cannot state it as a rule, reconsider whether this is truly a lesson or just an event record.
 
-## 以后怎么做
+## Action Protocol
 
-写出未来遇到相似情况时的行动规则、检查步骤或预防动作。
+Write the concrete actions, checklist items, or decision rules to follow when a similar situation arises. Each item should be executable — "be more careful" is not an action.
 
-## 验证
+## Verification
 
-说明你打算如何验证这个 lesson 真的能改善结果，而不是停留在口头总结。
+Describe how you would test whether this lesson actually improves outcomes. What would you measure? What would indicate the lesson was applied correctly vs. ignored?

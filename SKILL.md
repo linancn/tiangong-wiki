@@ -109,6 +109,7 @@ Automatic vault processing uses additional `WIKI_AGENT_*` variables, but those b
 - `references/env.md`
 - `references/wiki-maintenance-instruction.md`
 - `references/vault-to-wiki-instruction.md`
+- `references/vault-file-processing.md`
 - `references/service-admin.md`
 
 ## Assets

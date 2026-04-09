@@ -14,22 +14,22 @@ resolvedAt:
 correctedConcepts: []
 ---
 
-## 原来的理解（错误）
+## False Belief
 
-准确写下当时错误的理解，不要提前替它辩护或修正。
+State the incorrect understanding exactly as it was held — without softening, defending, or pre-correcting it. A reader should be able to recognize this belief if they currently hold it.
 
-## 为什么错了
+## Why It Is Wrong
 
-说明哪条证据、哪个反例或哪个推理步骤暴露了原理解的问题。
+Identify the specific evidence, counterexample, or reasoning flaw that disproves the false belief. Do not just assert it is wrong — show the proof.
 
-## 正确理解
+## Correct Understanding
 
-用清晰的语言写出现在确认正确的理解，并指出关键差异。
+State the corrected understanding clearly and precisely. Highlight the key difference from the false belief — what specifically changes?
 
-## 转折点
+## Turning Point
 
-记录让你真正完成认知切换的瞬间、材料或实验结果。
+Record the moment, material, experiment, or conversation that caused the actual cognitive shift. If no single turning point exists, this section may be omitted.
 
-## 防止复发
+## Recurrence Prevention
 
-写下未来再次遇到相似问题时，应该用什么检查点防止重复犯错。
+Write the checks, questions, or heuristics to apply in the future to avoid falling back into this misconception. Each item should be a concrete test, not a vague reminder.

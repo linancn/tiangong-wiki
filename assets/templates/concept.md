@@ -14,34 +14,30 @@ masteryLevel: medium
 prerequisites: []
 ---
 
-## 核心理解
+## Definition
 
-用两到四句话说明这个概念到底是什么，以及它为什么值得记住。
+Provide a precise, quotable definition of this concept. A reader should be able to cite this section without additional context. Do not write an introductory paragraph — write the definition.
 
-## 前置知识
+## Prerequisites
 
-列出理解这个概念之前必须已经掌握的知识、术语或背景。
+List the concepts, terms, or background knowledge required to understand this one. Link to existing wiki pages where possible.
 
-## 关键公式/定义
+## Formal Specification
 
-写下最关键的定义、公式、判别标准或符号约定，不要只写标题。
+Write the key formulas, criteria, thresholds, or formal rules that define this concept's behavior. If the concept has no formal specification, describe the decision boundary — under what conditions does something qualify as this concept vs. not?
 
-## 直觉/类比
+## Intuition & Analogy
 
-用一个直觉模型、类比或反例帮助未来的读者快速建立感觉。
+Provide one mental model, analogy, or worked example that builds correct intuition quickly. Prefer concrete examples over abstract explanations.
 
-## 典型应用
+## Typical Applications
 
-说明这个概念通常在哪些问题、项目或课程场景里真正会被用到。
+Name specific problems, project types, or domains where this concept is actively used. Do not list hypothetical uses — list real or well-documented ones.
 
-## 容易混淆
+## Boundary & Confusion
 
-写出它最容易和什么混淆，以及区分它们的判断线索。
+State what this concept is most easily confused with, and the specific test or criterion that distinguishes them. Do not just say "they are different" — describe what input or situation would produce a different outcome under each.
 
-## 开放问题
+## Open Questions
 
-记录你当前还没完全吃透的点、边界条件或后续要继续查的内容。
-
-## 来源
-
-说明这个概念主要来自哪些来源，并确保这些来源同步写入 frontmatter 的 sourceRefs。
+Record what remains unclear, what edge cases are unresolved, or what further investigation is needed. This section is expected to shrink as confidence increases.

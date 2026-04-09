@@ -12,20 +12,18 @@ updatedAt: 2026-04-06
 frequency:
 ---
 
-## 问题
+## Question
 
-用用户真实会问出来的语言写下这个高频问题，而不是抽象化改写。
+Write the question in the exact phrasing a real person would use. Do not abstract, rephrase, or make it sound formal — preserve the natural language of the asker.
 
-## 简短回答
+## Quick Answer
 
-先给出一段可以直接复用的短答案，方便快速回复。
+Provide a self-contained answer in 2-3 sentences that can be directly reused in a reply. It must be correct and complete enough to stand alone without reading further.
 
-## 详细解释
+## Full Explanation
 
-补充条件、例外、例子和判断边界，说明为什么短答案成立。
+Expand with conditions, exceptions, edge cases, and examples. Explain why the quick answer is correct and under what circumstances it might not apply.
 
-## 相关概念
+## Related Pages
 
-列出应当一起阅读的 concept、method 或 source-summary 页面，帮助继续深入。
-
-如果这个问题已经不再高频，也请在正文里说明是否应该降级维护或归档。
+Link to concept, method, or source-summary pages that provide deeper context. Use relatedPages frontmatter to keep these connections in the graph.

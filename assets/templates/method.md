@@ -14,18 +14,26 @@ effectiveness:
 applicableTo: []
 ---
 
-## 方法描述
+## Purpose & Mechanism
 
-先用一段完整的话解释这套方法的目标、输入、输出和基本流程。
+State what problem this method solves and why it works. Do not restate the title — explain the underlying mechanism or principle that makes this method effective.
 
-## 适用场景
+## Steps / Procedure
 
-说明这套方法在什么问题、约束和前置条件下最值得使用。
+List the concrete steps to execute this method. Each step should be actionable and verifiable. If the method has variants, describe the core sequence first, then note variations.
 
-## 不适用场景
+## Applicable Scenarios
 
-写出哪些边界条件会让这套方法失效，避免未来被误用。
+Specify the preconditions, input types, and constraints under which this method is the right choice. Be concrete — name the kind of problem, data, or situation, not just "when appropriate."
 
-## 使用记录
+## Inapplicable Scenarios
 
-记录真实使用过它的场景、结果、指标或反馈，支撑 effectiveness 的判断。
+State when this method should NOT be used. Name the boundary conditions, failure triggers, or assumptions that must hold. If these break, what goes wrong?
+
+## Failure Modes
+
+Describe how this method fails when misapplied. What does a bad outcome look like? What early signals indicate the method is not working? This section prevents blind reuse.
+
+## Evidence
+
+Record real uses of this method with measurable outcomes. Include context, results, and comparison baselines where available. Do not write "it worked well" without specifics — state what was measured and what changed.

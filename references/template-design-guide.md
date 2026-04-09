@@ -93,7 +93,7 @@ sourceRefs, relatedPages, tags, createdAt, updatedAt
 | 需要 `tiangong-wiki find --<field>` 过滤？ | `columns` | 建 SQLite 索引列，支持结构化查询 |
 | 需要出现在 `tiangong-wiki search` / `tiangong-wiki fts` 的摘要中？ | `summaryFields` | 纳入 summary_text 用于检索 |
 | 需要生成 edge（关联到其他页面/节点）？ | `edges` | 写入 edges 表，支持 graph 遍历 |
-| 只是页面内的补充信息？ | 仅写在 frontmatter | 存入 `pages.extra` JSON，不建列 |
+| 只是页面内的补充信息？ | 仍需显式登记到 schema | 当前实现不会接受“只写 frontmatter、不做声明”的字段 |
 
 ---
 
@@ -114,6 +114,7 @@ sourceRefs, relatedPages, tags, createdAt, updatedAt
 - 只有需要频繁按值过滤的字段才值得建列
 - 不同 type 的 columns 共存于同一张 `pages` 表，非该类型的页面该列值为 NULL
 - 列名全局唯一 — 如果两个 type 都有 `severity` 字段，它们共享同一个列
+- 任何模板 frontmatter 中出现的 type-specific 字段，都必须至少在 `columns`、`edges` 或 `commonEdges` 之一中声明；否则会被 lint 视为 `unregistered_fields`
 
 ---
 
@@ -161,6 +162,7 @@ sourceRefs, relatedPages, tags, createdAt, updatedAt
 - 选择能帮助检索的字段 — 如果知道 `domain: "环境工程"` 能帮搜索找到这个页面，就加进去
 - 不要放长文本字段，summary_text 应保持简洁
 - `defaultSummaryFields`（`title`, `tags`）自动包含，不需要重复
+- `summaryFields` 只决定是否进入 `summary_text`，不会自动注册字段；字段本身仍必须先在 `columns`、`edges` 或 `commonEdges` 中声明
 
 ---
 
@@ -266,6 +268,7 @@ decisions: []
 - [ ] 需要 `tiangong-wiki find` 过滤的字段都放进了 `columns`？
 - [ ] 生成 graph 边的数组字段都定义了 `edges`？
 - [ ] `summaryFields` 包含了有助于检索的关键字段？
+- [ ] 模板 frontmatter 里的每个 type-specific 字段都已在 `columns`、`edges` 或 `commonEdges` 中声明？
 - [ ] Body section 数量在 3-6 个之间，有逻辑递进？
 - [ ] Section 提示语具体而非泛泛？
-- [ ] 通过 `tiangong-wiki template create --type <type> --title <title>` 创建后，可以 `tiangong-wiki sync` + `tiangong-wiki lint` 无 error？
+- [ ] 通过 `tiangong-wiki template create --type <type> --title <title>` 创建后，可以先跑 `tiangong-wiki template lint`，再跑 `tiangong-wiki sync` + `tiangong-wiki lint`，且都无 error？

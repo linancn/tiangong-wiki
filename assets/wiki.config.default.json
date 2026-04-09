@@ -91,7 +91,8 @@
       "file": "templates/source-summary.md",
       "columns": {
         "sourceType": "text",
-        "vaultPath": "text"
+        "vaultPath": "text",
+        "keyFindings": "text"
       },
       "edges": {},
       "summaryFields": [
@@ -116,7 +117,8 @@
       "file": "templates/method.md",
       "columns": {
         "domain": "text",
-        "effectiveness": "text"
+        "effectiveness": "text",
+        "applicableTo": "text"
       },
       "edges": {},
       "summaryFields": [
@@ -159,7 +161,8 @@
       "file": "templates/resume.md",
       "columns": {
         "targetAudience": "text",
-        "lastReviewedAt": "text"
+        "lastReviewedAt": "text",
+        "vaultPath": "text"
       },
       "edges": {},
       "summaryFields": [

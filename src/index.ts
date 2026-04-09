@@ -3,6 +3,7 @@
 import { Command } from "commander";
 
 import packageJson from "../package.json" with { type: "json" };
+import { registerAssetCommand } from "./commands/asset.js";
 import { registerCheckConfigCommand } from "./commands/check-config.js";
 import { registerCreateCommand } from "./commands/create.js";
 import { registerDaemonCommand } from "./commands/daemon.js";
@@ -50,6 +51,7 @@ function buildProgram(): Command {
   registerDoctorCommand(program);
   registerSyncCommand(program);
   registerCheckConfigCommand(program);
+  registerAssetCommand(program);
   registerFindCommand(program, runtimeConfig);
   registerSearchCommand(program);
   registerFtsCommand(program);

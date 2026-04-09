@@ -14,22 +14,18 @@ vaultPath:
 keyFindings: []
 ---
 
-## 来源信息
+## Source Identity
 
-交代这份来源是什么、来自哪里、为什么值得被单独消化成 wiki 页面。
+State what this source is (document type, author, date, context) and why it was preserved as a source-summary rather than extracted into a more specific knowledge type. If the source contains extractable concepts, methods, or lessons, those should be separate pages — not folded into this summary.
 
-## 核心内容
+## Key Claims
 
-用结构化段落总结这份来源的主题、结构和主要论点，而不是只写一句话。
+List the independently quotable factual claims, data points, or conclusions from this source. Each item should be a self-contained assertion, not a topic heading. Do not paraphrase broadly — capture what the source actually states.
 
-## 关键结论
+## Knowledge Connections
 
-列出对后续决策、学习或项目推进最重要的结论与发现。
+Identify which existing wiki pages this source supports, extends, challenges, or contradicts. Name specific pages and describe the relationship. Keep `sourceRefs` and `relatedPages` aligned with the key connections, but do not repeat them mechanically in prose. Use the body only to explain the relationship.
 
-## 与已有知识的关系
+## Evidence Pointers
 
-说明这份来源会补强、修正或挑战哪些现有 concept、method 或 lesson 页面。
-
-## 重要引用
-
-摘录最值得回看的句子、数据点、章节或页码线索，帮助以后快速回源。
+Optionally capture only the evidence needed for fast source recovery: short excerpts, exact data points, and precise locators such as page numbers, section headings, figure labels, or timestamps. Do not restate `sourceRefs`, and do not turn this section into a quote dump. Use it only when exact evidence localization would save future rereading.

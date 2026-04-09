@@ -471,6 +471,14 @@ describe("daemon HTTP server integration", () => {
     expect(typeInfo.file).toBe("templates/brief.md");
     expect(typeInfo.columns).toEqual({});
     expect(runCli(["template", "show", "brief"], workspace.env).stdout).toContain("pageType: brief");
+    const templateLint = runCliJson<{
+      errors: Array<unknown>;
+      warnings: Array<unknown>;
+      summary: { templates: number; errors: number; warnings: number };
+    }>(["template", "lint", "brief", "--format", "json"], workspace.env);
+    expect(templateLint.summary.templates).toBe(1);
+    expect(templateLint.errors).toEqual([]);
+    expect(templateLint.warnings).toEqual([]);
 
     const created = runCliJson<{ created: string; filePath: string }>(
       ["create", "--type", "brief", "--title", "Launch Brief", "--node-id", "launch-brief"],

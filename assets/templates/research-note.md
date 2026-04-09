@@ -13,22 +13,22 @@ researchTopic:
 stage:
 ---
 
-## 研究问题
+## Research Question
 
-明确写下当前真正要回答的问题，以及为什么这个问题值得继续研究。
+State the specific question being investigated and why it matters. A well-scoped question should be falsifiable or at least answerable with evidence.
 
-## 已读文献
+## Literature & Sources
 
-汇总已经读过的来源、它们分别提供了什么线索，以及哪些结论彼此冲突。
+List sources consulted so far. For each, note: what it contributes (supports / contradicts / is tangential) and what key claim or data it provides. Link to source-summary pages where they exist.
 
-## 当前理解
+## Working Hypothesis
 
-用你自己的话总结目前的工作假设、解释框架或初步结论。
+State your current best explanation or framework. Label it explicitly as a hypothesis — this is not a conclusion. Include the assumptions it rests on.
 
-## 开放问题
+## Open Questions
 
-列出尚未解决的疑点、反例、数据缺口或需要验证的推断。
+List unresolved issues: contradictory evidence, data gaps, untested assumptions, or alternative explanations you have not yet ruled out.
 
-## 下一步
+## Next Actions
 
-说明下一轮最值得做的阅读、实验、访谈或验证动作。
+Describe the specific next steps: what to read, test, build, or ask. Each action should be concrete enough to execute immediately — "research more" is not an action.

@@ -16,18 +16,18 @@ fromConcepts: []
 toConcepts: []
 ---
 
-## 来源知识
+## Source Knowledge
 
-写清楚这个迁移起点来自什么课程、项目、领域或知识体系。
+Identify the origin domain, course, or knowledge system. Link to existing concept or method pages that represent the source-side knowledge being transferred. When a source-side concept already has a node in the wiki, record its nodeId in frontmatter `fromConcepts` instead of leaving the mapping only in prose.
 
-## 目标场景
+## Target Scenario
 
-写清楚这个迁移最终要解决什么目标问题，以及目标场景里的限制条件。
+Describe the target problem, domain, or context where the source knowledge is being applied. State the constraints and requirements specific to the target that make direct transfer non-trivial.
 
-## 迁移方式
+## Transfer Mapping
 
-分步骤说明原知识是如何被翻译、映射或改造后用于目标场景的。
+Describe how each source-side concept or method maps to its target-side equivalent. Use explicit A → B mappings where possible. For each mapping, note what adapts cleanly and what requires modification. Use the body to explain the mapping, and keep `fromConcepts` / `toConcepts` in sync for the key nodes so the graph retains the structure.
 
-## 迁移陷阱
+## Invalid Transfers
 
-指出最容易误迁移的地方，以及哪些条件不满足时这个 bridge 不应复用。
+State the conditions under which this bridge breaks down. Which assumptions from the source domain do not hold in the target? What would go wrong if the transfer were applied without these caveats?
