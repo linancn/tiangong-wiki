@@ -324,7 +324,7 @@ describe("setup and doctor integration", () => {
       allowFailure: true,
     });
     expect(setup.status).toBe(1);
-    expect(setup.stderr).toContain("failed to install parser skill pdf");
+    expect(setup.stderr).toContain("failed to install skill pdf");
     expect(setup.stderr).toContain("fake installer failure");
     expect(existsSync(path.join(workspace.root, ".wiki.env"))).toBe(false);
   });
