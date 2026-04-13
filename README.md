@@ -94,8 +94,9 @@ tiangong-wiki graph bayes-theorem --depth 2           # graph traversal
 ```
 
 ```bash
-tiangong-wiki daemon run                              # start dashboard & HTTP API
+tiangong-wiki daemon start                            # start the daemon in the background
 tiangong-wiki dashboard                               # open dashboard in browser
+# or: tiangong-wiki daemon run                        # run the daemon in the foreground for debugging
 ```
 
 > Environment variables are managed via `.wiki.env` (created by `tiangong-wiki setup`). The CLI prefers the nearest local `.wiki.env`, then falls back to the global default workspace config. See [references/troubleshooting.md](./references/troubleshooting.md) for the full reference.

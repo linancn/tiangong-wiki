@@ -94,8 +94,9 @@ tiangong-wiki graph bayes-theorem --depth 2           # 图遍历
 ```
 
 ```bash
-tiangong-wiki daemon run                              # 启动仪表盘和 HTTP API
+tiangong-wiki daemon start                            # 后台启动 daemon
 tiangong-wiki dashboard                               # 在浏览器中打开仪表盘
+# 或者：tiangong-wiki daemon run                      # 前台运行 daemon，适合调试
 ```
 
 > 环境变量通过 `.wiki.env` 管理（由 `tiangong-wiki setup` 创建）。CLI 会优先使用最近的本地 `.wiki.env`，找不到时再 fallback 到全局默认工作区配置。完整参考见 [references/troubleshooting.md](./references/troubleshooting.md)。
