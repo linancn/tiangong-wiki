@@ -363,7 +363,10 @@ describe("setup and doctor integration", () => {
     const workspace = createWorkspace();
     workspaces.push(workspace);
 
-    const env = stripWikiEnv(workspace.env);
+    const env = {
+      ...stripWikiEnv(workspace.env),
+      XDG_CONFIG_HOME: path.join(workspace.root, ".empty-config-home"),
+    };
     const outsideCwd = path.dirname(workspace.root);
     const doctor = runCli(["doctor", "--format", "json"], env, {
       cwd: outsideCwd,
