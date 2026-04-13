@@ -24,6 +24,21 @@
 npm install -g @biaoo/tiangong-wiki
 ```
 
+## 更新
+
+升级 npm 包本身：
+
+```bash
+npm install -g @biaoo/tiangong-wiki@latest
+```
+
+升级 CLI 后，或上游 skill 内容有更新时，刷新工作区本地 managed skills：
+
+```bash
+tiangong-wiki skill status
+tiangong-wiki skill update --all
+```
+
 <details>
 <summary><strong>作为 AI Agent Skill 使用</strong></summary>
 
@@ -47,6 +62,7 @@ tiangong-wiki setup
 tiangong-wiki skill add ../my-skills --skill notes
 tiangong-wiki skill status
 tiangong-wiki skill update notes
+tiangong-wiki skill update --all
 ```
 
 </details>
@@ -61,7 +77,14 @@ tiangong-wiki init                                    # 初始化工作区
 tiangong-wiki sync                                    # 索引 Markdown 文件
 ```
 
-`tiangong-wiki setup` 会创建 `.wiki.env`。后续的 `doctor`、`init`、`sync` 等命令应在包含该 `.wiki.env` 的工作区根目录执行；如果不在该目录执行，则需要显式设置 `WIKI_ENV_FILE` 指向它。
+`tiangong-wiki setup` 会创建工作区本地 `.wiki.env`，并将其记录为默认工作区配置。CLI 的配置解析优先级如下：
+
+1. `--env-file <path>`
+2. `WIKI_ENV_FILE`
+3. 从当前目录向上查找最近的 `.wiki.env`
+4. `tiangong-wiki setup` 写入的全局默认工作区配置
+
+这意味着命令仍然最适合在 workspace 内执行；但 setup 之后，即使在 workspace 外运行，也可以通过默认配置正常工作，或者通过 `--env-file` 显式指定目标工作区。
 
 ```bash
 tiangong-wiki find --type concept --status active     # 结构化查询
@@ -75,7 +98,7 @@ tiangong-wiki daemon run                              # 启动仪表盘和 HTTP 
 tiangong-wiki dashboard                               # 在浏览器中打开仪表盘
 ```
 
-> 环境变量通过 `.wiki.env` 管理（由 `tiangong-wiki setup` 创建）。CLI 会从当前目录开始向上自动发现最近的 `.wiki.env`。完整参考见 [references/troubleshooting.md](./references/troubleshooting.md)。
+> 环境变量通过 `.wiki.env` 管理（由 `tiangong-wiki setup` 创建）。CLI 会优先使用最近的本地 `.wiki.env`，找不到时再 fallback 到全局默认工作区配置。完整参考见 [references/troubleshooting.md](./references/troubleshooting.md)。
 
 ## CLI
 

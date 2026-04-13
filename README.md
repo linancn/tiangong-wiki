@@ -24,6 +24,21 @@
 npm install -g @biaoo/tiangong-wiki
 ```
 
+## Update
+
+Upgrade the npm package itself:
+
+```bash
+npm install -g @biaoo/tiangong-wiki@latest
+```
+
+Refresh workspace-local managed skills after upgrading the CLI or when upstream skill content changes:
+
+```bash
+tiangong-wiki skill status
+tiangong-wiki skill update --all
+```
+
 <details>
 <summary><strong>Use as an AI Agent Skill</strong></summary>
 
@@ -47,6 +62,7 @@ To manage workspace-local skills from arbitrary repo/path sources after setup:
 tiangong-wiki skill add ../my-skills --skill notes
 tiangong-wiki skill status
 tiangong-wiki skill update notes
+tiangong-wiki skill update --all
 ```
 
 </details>
