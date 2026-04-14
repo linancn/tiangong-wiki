@@ -40,7 +40,7 @@ describe("CodexSdkWorkflowRunner", () => {
     }
   });
 
-  it("enables network access and persists runtime thread ids for start and resume", async () => {
+  it("defaults to danger-full-access, supports sandbox override, and persists runtime thread ids for start and resume", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "wiki-codex-sdk-runner-"));
     tempDirs.push(root);
     const promptPath = path.join(root, "prompt.md");
@@ -121,7 +121,7 @@ describe("CodexSdkWorkflowRunner", () => {
       expect.objectContaining({
         workingDirectory: root,
         modelReasoningEffort: "low",
-        sandboxMode: "workspace-write",
+        sandboxMode: "danger-full-access",
         networkAccessEnabled: true,
         approvalPolicy: "never",
         webSearchMode: "disabled",
@@ -132,7 +132,7 @@ describe("CodexSdkWorkflowRunner", () => {
       expect.objectContaining({
         workingDirectory: root,
         modelReasoningEffort: "low",
-        sandboxMode: "workspace-write",
+        sandboxMode: "danger-full-access",
         networkAccessEnabled: true,
         approvalPolicy: "never",
         webSearchMode: "disabled",
@@ -146,5 +146,41 @@ describe("CodexSdkWorkflowRunner", () => {
     const resumedRun = resumeThread.mock.results[0]?.value.runStreamed as ReturnType<typeof vi.fn>;
     expect(startedRun).toHaveBeenCalledWith("Process the queue item.", undefined);
     expect(resumedRun).toHaveBeenCalledWith("Process the queue item.", undefined);
+  });
+
+  it("classifies sandbox startup failures with a dedicated error", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "wiki-codex-sdk-sandbox-"));
+    tempDirs.push(root);
+    const promptPath = path.join(root, "prompt.md");
+    const queueItemPath = path.join(root, "queue-item.json");
+    const resultPath = path.join(root, "result.json");
+
+    writeFileSync(promptPath, "Process the queue item.\n", "utf8");
+    writeFileSync(queueItemPath, `${JSON.stringify({ fileId: "imports/spec.pdf", threadId: null }, null, 2)}\n`, "utf8");
+    writeFileSync(resultPath, "", "utf8");
+
+    startThread.mockReturnValue({
+      id: null,
+      runStreamed: vi.fn().mockRejectedValue(new Error("bwrap: setting up uid map: Permission denied")),
+    });
+
+    const { CodexSdkWorkflowRunner } = await import("../../src/core/codex-workflow.js");
+    const runner = new CodexSdkWorkflowRunner({ sandboxMode: "workspace-write" });
+    const input = {
+      queueItemId: "imports/spec.pdf",
+      workspaceRoot: root,
+      packageRoot: path.resolve(root, ".."),
+      promptPath,
+      promptText: "Process the queue item.",
+      queueItemPath,
+      resultPath,
+      skillArtifactsPath: path.join(root, "skill-artifacts"),
+      model: "gpt-5.4",
+      env: {
+        WIKI_AGENT_API_KEY: "agent-key",
+      },
+    };
+
+    await expect(runner.startWorkflow(input)).rejects.toThrowError("Codex workflow sandbox failed to initialize");
   });
 });

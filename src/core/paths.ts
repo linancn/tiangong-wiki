@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 import { AppError } from "../utils/errors.js";
-import type { AgentProcessingSettings, RuntimePaths, WikiAgentBackend } from "../types/page.js";
+import type { AgentProcessingSettings, RuntimePaths, WikiAgentBackend, WikiAgentSandboxMode } from "../types/page.js";
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 const FALSE_VALUES = new Set(["0", "false", "no", "off"]);
@@ -121,6 +121,18 @@ export function parseWikiAgentBackend(raw: string | undefined): WikiAgentBackend
   );
 }
 
+export function parseWikiAgentSandboxMode(raw: string | undefined): WikiAgentSandboxMode {
+  const value = (raw ?? "danger-full-access").trim().toLowerCase();
+  if (value === "danger-full-access" || value === "workspace-write") {
+    return value;
+  }
+
+  throw new AppError(
+    `WIKI_AGENT_SANDBOX_MODE must be "danger-full-access" or "workspace-write", got ${raw}`,
+    "config",
+  );
+}
+
 export function resolveAgentSettings(
   env: NodeJS.ProcessEnv = process.env,
   options: { strict?: boolean } = {},
@@ -130,6 +142,7 @@ export function resolveAgentSettings(
   const apiKey = env.WIKI_AGENT_API_KEY?.trim() || null;
   const model = env.WIKI_AGENT_MODEL?.trim() || null;
   const batchSize = parseNonNegativeInteger(env.WIKI_AGENT_BATCH_SIZE, 5, "WIKI_AGENT_BATCH_SIZE");
+  const sandboxMode = parseWikiAgentSandboxMode(env.WIKI_AGENT_SANDBOX_MODE);
   const workflowTimeoutSeconds = parsePositiveInteger(
     env.WIKI_WORKFLOW_TIMEOUT,
     600,
@@ -159,6 +172,7 @@ export function resolveAgentSettings(
     apiKey,
     model,
     batchSize,
+    sandboxMode,
     workflowTimeoutSeconds,
     configured: enabled && missing.length === 0,
     missing,

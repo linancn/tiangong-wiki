@@ -238,6 +238,55 @@ describe("setup and doctor integration", () => {
     );
   });
 
+  it("defaults WIKI_AGENT_SANDBOX_MODE to danger-full-access during setup when agent workflow is enabled", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    const configHome = path.join(workspace.root, ".config-home");
+
+    const env = {
+      ...stripWikiEnv(workspace.env),
+      XDG_CONFIG_HOME: configHome,
+      PATH: [createFakeSkillsInstaller(workspace.root), process.env.PATH].filter(Boolean).join(path.delimiter),
+    };
+    const answers = [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "n",
+      "y",
+      "",
+      "test-agent-key",
+      "gpt-5.4",
+      "",
+      "",
+      "n",
+      "n",
+      "n",
+      "n",
+      "y",
+    ].join("\n");
+
+    const setup = runCli(["setup"], env, {
+      cwd: workspace.root,
+      input: answers,
+    });
+    expect(setup.status).toBe(0);
+    expect(setup.stdout).toContain("Warning: danger-full-access grants full access to the runtime workspace.");
+
+    const envFilePath = setup.stdout.match(/configuration file: (.+)/)?.[1]?.trim();
+    expect(envFilePath).toBeTruthy();
+    const envFile = readFile(envFilePath!);
+    expect(envFile).toContain("WIKI_AGENT_ENABLED=true");
+    expect(envFile).toContain("WIKI_AGENT_API_KEY=test-agent-key");
+    expect(envFile).toContain("WIKI_AGENT_MODEL=gpt-5.4");
+    expect(envFile).toContain("WIKI_AGENT_SANDBOX_MODE=danger-full-access");
+  });
+
   it("reports actionable errors when the generated runtime assets are missing", () => {
     const workspace = createWorkspace();
     workspaces.push(workspace);

@@ -219,6 +219,11 @@ export function readWorkflowResult(resultPath: string): WorkflowResultManifest {
   }
 
   const rawText = readTextFileSync(resultPath);
+  if (!rawText.trim()) {
+    fail("Workflow result is empty", {
+      resultPath,
+    });
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);

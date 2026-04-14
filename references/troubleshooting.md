@@ -73,7 +73,10 @@ The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to p
 | `WIKI_AGENT_API_KEY` | If enabled | API key for the LLM provider |
 | `WIKI_AGENT_MODEL` | No | Model name (e.g. `gpt-5.4`, `Qwen/Qwen3.5-397B-A17B-GPTQ-Int4`) |
 | `WIKI_AGENT_BATCH_SIZE` | No | Max concurrent vault items per batch (default: `5`) |
+| `WIKI_AGENT_SANDBOX_MODE` | No | Codex sandbox mode: `danger-full-access` (default) or `workspace-write` |
 | `WIKI_PARSER_SKILLS` | No | Comma-separated parser skill list (e.g. `pdf,docx,pptx,xlsx`) |
+
+`tiangong-wiki setup` now prompts for `WIKI_AGENT_SANDBOX_MODE` when automatic vault processing is enabled. The default is `danger-full-access`, and the setup wizard highlights that this mode grants full runtime access.
 
 ---
 
@@ -101,6 +104,10 @@ Always run `tiangong-wiki lint --path <page-id> --format json` after mutations. 
 ### Parser skills not found
 
 Parser skills must be installed under `<workspace-root>/.agents/skills/`. Run `tiangong-wiki skill` to inspect installed skills. Use `tiangong-wiki skill update --all` to update.
+
+### Codex workflow sandbox fails to initialize
+
+If the agent workflow fails with `bwrap`, `unshare`, `uid_map`, or similar sandbox startup errors, switch `WIKI_AGENT_SANDBOX_MODE` to `danger-full-access`. Use `workspace-write` only when you explicitly want that sandbox mode and know the host supports it.
 
 ---
 

@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-import { parseWorkflowResult } from "../../src/core/workflow-result.js";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { parseWorkflowResult, readWorkflowResult } from "../../src/core/workflow-result.js";
 
 function validManifest() {
   return {
@@ -38,6 +42,14 @@ function validManifest() {
 }
 
 describe("workflow result parsing", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    while (tempDirs.length > 0) {
+      rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    }
+  });
+
   it("accepts a valid manifest", () => {
     const manifest = parseWorkflowResult(validManifest());
     expect(manifest.threadId).toBe("thread-123");
@@ -74,5 +86,23 @@ describe("workflow result parsing", () => {
     expect(() => parseWorkflowResult(manifest)).toThrowError(
       "result.actions must contain at least one action when decision=apply",
     );
+  });
+
+  it("rejects empty result files with a dedicated error", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "workflow-result-empty-"));
+    tempDirs.push(dir);
+    const resultPath = path.join(dir, "result.json");
+    writeFileSync(resultPath, "", "utf8");
+
+    expect(() => readWorkflowResult(resultPath)).toThrowError("Workflow result is empty");
+  });
+
+  it("rejects malformed result files as invalid JSON", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "workflow-result-invalid-"));
+    tempDirs.push(dir);
+    const resultPath = path.join(dir, "result.json");
+    writeFileSync(resultPath, "{not-json", "utf8");
+
+    expect(() => readWorkflowResult(resultPath)).toThrowError("Workflow result is not valid JSON");
   });
 });

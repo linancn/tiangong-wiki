@@ -3,8 +3,10 @@ import path from "node:path";
 import { Codex, type CodexOptions, type Thread } from "@openai/codex-sdk";
 
 import { readWorkflowResult, type WorkflowResultManifest } from "./workflow-result.js";
+import { resolveAgentSettings } from "./paths.js";
 import { readTextFileSync, writeTextFileSync } from "../utils/fs.js";
 import { AppError } from "../utils/errors.js";
+import type { WikiAgentSandboxMode } from "../types/page.js";
 
 export const CODEX_WORKFLOW_VERSION = "2026-04-07";
 
@@ -33,6 +35,10 @@ export interface CodexWorkflowRunner {
   startWorkflow(input: CodexWorkflowInput): Promise<CodexWorkflowHandle>;
   resumeWorkflow(threadId: string, input: CodexWorkflowInput): Promise<CodexWorkflowHandle>;
   collectResult(handle: CodexWorkflowHandle, input: CodexWorkflowInput): Promise<WorkflowResultManifest>;
+}
+
+interface CodexSdkWorkflowRunnerOptions {
+  sandboxMode?: WikiAgentSandboxMode;
 }
 
 function normalizeEnv(input: CodexWorkflowInput): Record<string, string> {
@@ -130,17 +136,11 @@ async function runThread(thread: Thread, input: CodexWorkflowInput): Promise<str
       }
 
       if (event.type === "turn.failed") {
-        throw new AppError("Codex workflow turn failed", "runtime", {
-          cause: event.error.message,
-          threadId: activeThreadId,
-        });
+        throw classifyWorkflowRuntimeError("Codex workflow turn failed", event.error.message, activeThreadId);
       }
 
       if (event.type === "error") {
-        throw new AppError("Codex workflow stream failed", "runtime", {
-          cause: event.message,
-          threadId: activeThreadId,
-        });
+        throw classifyWorkflowRuntimeError("Codex workflow stream failed", event.message, activeThreadId);
       }
     }
   } catch (error) {
@@ -148,10 +148,7 @@ async function runThread(thread: Thread, input: CodexWorkflowInput): Promise<str
       throw error;
     }
     const message = error instanceof Error ? error.message : String(error);
-    throw new AppError("Codex workflow turn failed", "runtime", {
-      cause: message,
-      threadId: activeThreadId,
-    });
+    throw classifyWorkflowRuntimeError("Codex workflow turn failed", message, activeThreadId);
   }
 
   if (!activeThreadId && thread.id) {
@@ -167,6 +164,8 @@ async function runThread(thread: Thread, input: CodexWorkflowInput): Promise<str
 }
 
 export class CodexSdkWorkflowRunner implements CodexWorkflowRunner {
+  constructor(private readonly options: CodexSdkWorkflowRunnerOptions = {}) {}
+
   // The SDK can only continue a thread by sending a new input, so queue retries
   // must not automatically resume real workflow threads inline.
 
@@ -177,7 +176,7 @@ export class CodexSdkWorkflowRunner implements CodexWorkflowRunner {
       modelReasoningEffort: "low",
       workingDirectory: input.workspaceRoot,
       skipGitRepoCheck: true,
-      sandboxMode: "workspace-write",
+      sandboxMode: this.options.sandboxMode ?? "danger-full-access",
       networkAccessEnabled: true,
       approvalPolicy: "never",
       webSearchMode: "disabled",
@@ -194,7 +193,7 @@ export class CodexSdkWorkflowRunner implements CodexWorkflowRunner {
       modelReasoningEffort: "low",
       workingDirectory: input.workspaceRoot,
       skipGitRepoCheck: true,
-      sandboxMode: "workspace-write",
+      sandboxMode: this.options.sandboxMode ?? "danger-full-access",
       networkAccessEnabled: true,
       approvalPolicy: "never",
       webSearchMode: "disabled",
@@ -299,5 +298,36 @@ export function createDefaultWorkflowRunner(env: NodeJS.ProcessEnv = process.env
     return createSkipOnlyTestWorkflowRunner({ delayMs, mode: "delay-skip" });
   }
 
-  return new CodexSdkWorkflowRunner();
+  return new CodexSdkWorkflowRunner({
+    sandboxMode: resolveAgentSettings(env).sandboxMode,
+  });
+}
+
+function isSandboxStartupFailure(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("bwrap") ||
+    normalized.includes("bubblewrap") ||
+    normalized.includes("uid map") ||
+    normalized.includes("uid_map") ||
+    normalized.includes("gid map") ||
+    normalized.includes("gid_map") ||
+    normalized.includes("unshare") ||
+    normalized.includes("operation not permitted")
+  );
+}
+
+function classifyWorkflowRuntimeError(baseMessage: string, cause: string, threadId: string | null): AppError {
+  if (isSandboxStartupFailure(cause)) {
+    return new AppError("Codex workflow sandbox failed to initialize", "runtime", {
+      cause,
+      threadId,
+      phase: "sandbox",
+    });
+  }
+
+  return new AppError(baseMessage, "runtime", {
+    cause,
+    threadId,
+  });
 }

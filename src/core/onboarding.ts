@@ -7,7 +7,7 @@ import { DEFAULT_WIKI_ENV_FILE, getCliEnvironmentInfo, parseEnvFile, serializeEn
 import { resolveTemplateFilePath, loadConfig } from "./config.js";
 import { EmbeddingClient } from "./embedding.js";
 import { writeGlobalConfig } from "./global-config.js";
-import { parseVaultHashMode, resolveAgentSettings } from "./paths.js";
+import { parseVaultHashMode, parseWikiAgentSandboxMode, resolveAgentSettings } from "./paths.js";
 import { loadSynologyConfigFromEnv, normalizeSynologyRemotePath, withSynologyClient } from "./synology.js";
 import {
   ensureWikiSkillInstall,
@@ -97,6 +97,7 @@ interface SetupValues {
   agentApiKey: string | null;
   agentModel: string | null;
   agentBatchSize: string | null;
+  agentSandboxMode: "danger-full-access" | "workspace-write" | null;
   parserSkills: ParserSkillName[];
 }
 
@@ -173,11 +174,17 @@ const MANAGED_ENV_KEYS = new Set([
   "WIKI_AGENT_API_KEY",
   "WIKI_AGENT_MODEL",
   "WIKI_AGENT_BATCH_SIZE",
+  "WIKI_AGENT_SANDBOX_MODE",
   "WIKI_PARSER_SKILLS",
 ]);
 
 function writeSection(output: NodeJS.WritableStream, title: string): void {
   output.write(`\n${title}\n`);
+}
+
+function writeWarning(output: NodeJS.WritableStream, message: string): void {
+  const isTty = "isTTY" in output && output.isTTY;
+  output.write(isTty ? `\x1b[31m${message}\x1b[0m\n` : `${message}\n`);
 }
 
 function resolvePackageRoot(packageRoot?: string): string {
@@ -212,6 +219,14 @@ function safeVaultHashMode(rawValue: string | undefined, defaultValue: "content"
     return parseVaultHashMode(rawValue);
   } catch {
     return defaultValue;
+  }
+}
+
+function safeAgentSandboxMode(rawValue: string | undefined): "danger-full-access" | "workspace-write" {
+  try {
+    return parseWikiAgentSandboxMode(rawValue);
+  } catch {
+    return "danger-full-access";
   }
 }
 
@@ -621,6 +636,7 @@ function getPathDefaults(env: NodeJS.ProcessEnv, cwd: string): SetupValues {
     agentApiKey: env.WIKI_AGENT_API_KEY ?? null,
     agentModel: env.WIKI_AGENT_MODEL ?? null,
     agentBatchSize: env.WIKI_AGENT_BATCH_SIZE ?? "5",
+    agentSandboxMode: safeAgentSandboxMode(env.WIKI_AGENT_SANDBOX_MODE),
     parserSkills: parseParserSkills(env.WIKI_PARSER_SKILLS, { strict: false }),
   };
 }
@@ -701,7 +717,9 @@ async function collectAgentSettings(
   driver: PromptDriver,
   ctx: PromptContext,
   defaults: SetupValues,
-): Promise<Pick<SetupValues, "agentEnabled" | "agentBaseUrl" | "agentApiKey" | "agentModel" | "agentBatchSize">> {
+): Promise<
+  Pick<SetupValues, "agentEnabled" | "agentBaseUrl" | "agentApiKey" | "agentModel" | "agentBatchSize" | "agentSandboxMode">
+> {
   const enabled = await promptYesNo(
     driver,
     "Enable automatic vault-to-wiki processing?",
@@ -714,8 +732,11 @@ async function collectAgentSettings(
       agentApiKey: null,
       agentModel: null,
       agentBatchSize: null,
+      agentSandboxMode: null,
     };
   }
+
+  writeWarning(ctx.output, "Warning: danger-full-access grants full access to the runtime workspace.");
 
   return {
     agentEnabled: true,
@@ -738,6 +759,22 @@ async function collectAgentSettings(
       defaults.agentBatchSize ?? "5",
       { validator: (value) => validateNonNegativeInteger(value, "WIKI_AGENT_BATCH_SIZE") },
     ),
+    agentSandboxMode: await driver.select<"danger-full-access" | "workspace-write">({
+      message: "WIKI_AGENT_SANDBOX_MODE",
+      defaultValue: defaults.agentSandboxMode ?? "danger-full-access",
+      choices: [
+        {
+          value: "danger-full-access",
+          label: "danger-full-access",
+          description: "Full access to the runtime workspace. Default.",
+        },
+        {
+          value: "workspace-write",
+          label: "workspace-write",
+          description: "Use Codex workspace-write sandbox when the host supports it.",
+        },
+      ],
+    }),
   };
 }
 
@@ -852,6 +889,7 @@ function buildSetupSummary(values: SetupValues): string {
     lines.push(`  WIKI_AGENT_BASE_URL: ${values.agentBaseUrl}`);
     lines.push(`  WIKI_AGENT_MODEL: ${values.agentModel}`);
     lines.push(`  WIKI_AGENT_BATCH_SIZE: ${values.agentBatchSize}`);
+    lines.push(`  WIKI_AGENT_SANDBOX_MODE: ${values.agentSandboxMode}`);
   }
 
   if (values.vaultSource === "synology") {
@@ -894,6 +932,7 @@ function writeSetupEnvFile(values: SetupValues): void {
     ["WIKI_AGENT_API_KEY", values.agentEnabled ? values.agentApiKey : null],
     ["WIKI_AGENT_MODEL", values.agentEnabled ? values.agentModel : null],
     ["WIKI_AGENT_BATCH_SIZE", values.agentEnabled ? values.agentBatchSize : null],
+    ["WIKI_AGENT_SANDBOX_MODE", values.agentEnabled ? values.agentSandboxMode : null],
     ["WIKI_PARSER_SKILLS", formatParserSkills(values.parserSkills)],
   ];
 

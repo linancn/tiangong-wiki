@@ -12,7 +12,7 @@ import {
 } from "../../src/core/codex-workflow.js";
 import { resolveRuntimePaths } from "../../src/core/paths.js";
 import { processVaultQueueBatch } from "../../src/core/vault-processing.js";
-import type { WorkflowResultManifest } from "../../src/core/workflow-result.js";
+import { readWorkflowResult, type WorkflowResultManifest } from "../../src/core/workflow-result.js";
 import { ensureWikiSkillInstall } from "../../src/core/workspace-skills.js";
 import { AppError } from "../../src/utils/errors.js";
 import {
@@ -296,6 +296,42 @@ describe("workflow runner selection", () => {
     expect(queueRows.find((row) => row.fileId === "imports/fail.pdf")?.lastErrorAt).toBeTruthy();
   });
 
+  it("records sandbox startup failures with explicit root-cause messaging", async () => {
+    const workspace = createWorkspace(baseEnv({ WIKI_AGENT_SANDBOX_MODE: "workspace-write" }));
+    workspaces.push(workspace);
+    writeVaultFile(workspace, "imports/sandbox.pdf", "Sandbox failure.");
+
+    runCli(["init"], workspace.env);
+
+    const runner: CodexWorkflowRunner = {
+      async startWorkflow(): Promise<CodexWorkflowHandle> {
+        throw new AppError("Codex workflow sandbox failed to initialize", "runtime", {
+          cause: "bwrap: setting up uid map: Permission denied",
+        });
+      },
+      async resumeWorkflow(): Promise<CodexWorkflowHandle> {
+        throw new Error("resumeWorkflow should not run for a fresh item");
+      },
+      async collectResult(): Promise<WorkflowResultManifest> {
+        throw new Error("collectResult should not run after sandbox startup failure");
+      },
+    };
+
+    const result = await processVaultQueueBatch(workspace.env, { workflowRunner: runner });
+    expect(result).toMatchObject({
+      processed: 1,
+      done: 0,
+      errored: 1,
+      items: [
+        expect.objectContaining({
+          fileId: "imports/sandbox.pdf",
+          status: "error",
+          reason: "Codex workflow sandbox failed to initialize: bwrap: setting up uid map: Permission denied",
+        }),
+      ],
+    });
+  });
+
   it("salvages a persisted result manifest after a runner failure instead of re-injecting the task", async () => {
     const workspace = createWorkspace(baseEnv());
     workspaces.push(workspace);
@@ -482,6 +518,42 @@ describe("workflow runner selection", () => {
         errorMessage: null,
       }),
     ]);
+  });
+
+  it("surfaces empty persisted result manifests distinctly from invalid JSON", async () => {
+    const workspace = createWorkspace(baseEnv());
+    workspaces.push(workspace);
+    writeVaultFile(workspace, "imports/empty-result.pdf", "Empty manifest.");
+
+    runCli(["init"], workspace.env);
+
+    const runner: CodexWorkflowRunner = {
+      async startWorkflow(input: CodexWorkflowInput): Promise<CodexWorkflowHandle> {
+        input.onThreadStarted?.("empty-thread");
+        return { threadId: "empty-thread", mode: "start" };
+      },
+      async resumeWorkflow(): Promise<CodexWorkflowHandle> {
+        throw new Error("resumeWorkflow should not run for a fresh item");
+      },
+      async collectResult(_handle: CodexWorkflowHandle, input: CodexWorkflowInput): Promise<WorkflowResultManifest> {
+        return readWorkflowResult(input.resultPath);
+      },
+    };
+
+    const result = await processVaultQueueBatch(workspace.env, { workflowRunner: runner });
+    expect(result).toMatchObject({
+      processed: 1,
+      done: 0,
+      errored: 1,
+      items: [
+        expect.objectContaining({
+          fileId: "imports/empty-result.pdf",
+          status: "error",
+          threadId: "empty-thread",
+          reason: "Workflow result is empty",
+        }),
+      ],
+    });
   });
 
   it("times out stuck workflow attempts, aborts the active run, and records timeout details", async () => {

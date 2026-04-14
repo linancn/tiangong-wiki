@@ -6,6 +6,7 @@ export type EmbeddingStatus = "pending" | "done" | "error";
 export type VaultHashMode = "content" | "mtime";
 export type VaultQueueStatus = "pending" | "processing" | "done" | "skipped" | "error";
 export type WikiAgentBackend = "codex-workflow";
+export type WikiAgentSandboxMode = "danger-full-access" | "workspace-write";
 export type VaultWorkflowDecision = "skip" | "apply" | "propose_only";
 export type TemplateEvolutionMode = "proposal" | "apply";
 
@@ -98,6 +99,7 @@ export interface AgentProcessingSettings {
   apiKey: string | null;
   model: string | null;
   batchSize: number;
+  sandboxMode: WikiAgentSandboxMode;
   workflowTimeoutSeconds: number;
   configured: boolean;
   missing: string[];
