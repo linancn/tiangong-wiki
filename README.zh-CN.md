@@ -149,6 +149,13 @@ MCP 侧需要的环境变量：
 - `WIKI_MCP_PORT`：MCP HTTP 服务绑定端口，默认随机空闲端口
 - `WIKI_MCP_PATH`：MCP 路由路径，默认 `/mcp`
 
+Bearer token 说明：
+
+- Bearer token 不配置在 `.wiki.env`、daemon env 或 MCP env 里
+- 当前 V1 部署模型里，Bearer token 配在反向代理层
+- 具体示例见 [references/examples/centralized-service/nginx-centralized-wiki.conf](./references/examples/centralized-service/nginx-centralized-wiki.conf) 中的 `map $http_authorization ...`
+- 生产环境建议把 token 放在私有的 Nginx include 文件中，例如 `/etc/nginx/snippets/wiki-auth-tokens.conf`，再由主站点配置 `include` 进来，不要把真实密钥硬编码在仓库示例里
+
 ## 客户端如何使用这个 MCP
 
 任何支持 Streamable HTTP 的 MCP client 都可以连接到这个服务：
@@ -163,7 +170,7 @@ MCP 侧需要的环境变量：
 - `x-wiki-actor-type`
 - `x-request-id`
 
-生产环境推荐模式是：客户端只向反向代理发送 `Authorization: Bearer ...`，由反向代理在转发到 MCP server 前注入 actor headers。若你在本地直接连 MCP 做调试，则需要由客户端自己带上这些 header 才能调用写工具。
+生产环境推荐模式是：客户端只向反向代理发送 `Authorization: Bearer ...`，由反向代理在代理层完成 token 校验，并在转发到 MCP server 前注入 actor headers。若你在本地直接连 MCP 做调试，则需要由客户端自己带上这些 header 才能调用写工具。
 
 最小 Node.js MCP client 示例：
 

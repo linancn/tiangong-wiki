@@ -149,6 +149,13 @@ Required MCP-side environment variables:
 - `WIKI_MCP_PORT`: bind port for the MCP HTTP server, default random free port
 - `WIKI_MCP_PATH`: MCP route path, default `/mcp`
 
+Bearer token note:
+
+- Bearer tokens are not configured in `.wiki.env`, daemon env, or MCP env
+- In the current V1 deployment model, Bearer tokens live in the reverse proxy config
+- See [references/examples/centralized-service/nginx-centralized-wiki.conf](./references/examples/centralized-service/nginx-centralized-wiki.conf) for the current `map $http_authorization ...` example
+- In production, keep token values in a private Nginx include file such as `/etc/nginx/snippets/wiki-auth-tokens.conf`, then `include` it from the main site config instead of hardcoding secrets in the repo
+
 ## Using the MCP From Clients
 
 Any MCP client that supports Streamable HTTP can connect to the MCP endpoint:
@@ -163,7 +170,7 @@ Read tools can be called directly. Write tools such as `wiki_page_create`, `wiki
 - `x-wiki-actor-type`
 - `x-request-id`
 
-In production, the recommended model is: the client sends `Authorization: Bearer ...` to the reverse proxy, and the proxy injects the actor headers before forwarding to the MCP server. For local debugging without a proxy, your client must send those headers itself when calling write tools.
+In production, the recommended model is: the client sends `Authorization: Bearer ...` to the reverse proxy, the proxy validates the token there, and the proxy injects the actor headers before forwarding to the MCP server. For local debugging without a proxy, your client must send those headers itself when calling write tools.
 
 Minimal Node.js MCP client example:
 

@@ -104,6 +104,12 @@ env $(grep -v '^#' /etc/tiangong-wiki/centralized.env | xargs) node dist/index.j
 
 An example env file is also provided at [references/examples/centralized-service/centralized.env.example](./examples/centralized-service/centralized.env.example).
 
+Important:
+
+- Bearer tokens are not part of `centralized.env`
+- Bearer token validation belongs to Nginx, not the daemon or MCP process
+- Keep real tokens in a private Nginx include file such as `/etc/nginx/snippets/wiki-auth-tokens.conf`
+
 ---
 
 ## Required Environment Variables
@@ -200,6 +206,15 @@ Important:
 - clear `Authorization` before passing traffic upstream
 
 Example config: [references/examples/centralized-service/nginx-centralized-wiki.conf](./examples/centralized-service/nginx-centralized-wiki.conf)
+
+Recommended token placement:
+
+1. Create a private include file, for example `/etc/nginx/snippets/wiki-auth-tokens.conf`
+2. Move the `map $http_authorization ...` blocks into that file
+3. `include` that file from your main Nginx config inside the `http {}` scope
+4. Keep only placeholder tokens in repo-tracked example configs
+
+This keeps static Bearer tokens out of the service env file and out of the checked-in site config.
 
 Recommended exposure model:
 
