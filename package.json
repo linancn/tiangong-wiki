@@ -16,11 +16,13 @@
   },
   "license": "MIT",
   "bin": {
-    "tiangong-wiki": "./dist/index.js"
+    "tiangong-wiki": "./dist/index.js",
+    "tiangong-wiki-mcp-server": "./mcp-server/dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [
     "dist",
+    "mcp-server/dist",
     "assets",
     "references",
     "agents",

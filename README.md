@@ -101,6 +101,104 @@ tiangong-wiki dashboard                               # open dashboard in browse
 
 > Environment variables are managed via `.wiki.env` (created by `tiangong-wiki setup`). The CLI prefers the nearest local `.wiki.env`, then falls back to the global default workspace config. See [references/troubleshooting.md](./references/troubleshooting.md) for the full reference. For a centralized Linux + `systemd` + Nginx deployment, see [references/centralized-service-deployment.md](./references/centralized-service-deployment.md).
 
+## MCP Server
+
+Tiangong Wiki ships a separate MCP adapter that talks to the daemon over HTTP. It uses the MCP Streamable HTTP transport, not stdio.
+
+Start it after the daemon is already listening:
+
+```bash
+tiangong-wiki daemon run
+```
+
+In another shell:
+
+```bash
+export WIKI_DAEMON_BASE_URL=http://127.0.0.1:8787
+export WIKI_MCP_HOST=127.0.0.1
+export WIKI_MCP_PORT=9400
+export WIKI_MCP_PATH=/mcp
+
+tiangong-wiki-mcp-server
+```
+
+The server prints a JSON line like:
+
+```json
+{"status":"listening","host":"127.0.0.1","port":9400,"healthUrl":"http://127.0.0.1:9400/health","mcpUrl":"http://127.0.0.1:9400/mcp"}
+```
+
+If you are running from a source checkout instead of a global install:
+
+```bash
+npm install
+npm run build
+
+WIKI_DAEMON_BASE_URL=http://127.0.0.1:8787 \
+WIKI_MCP_PORT=9400 \
+node mcp-server/dist/index.js
+
+# or during development
+npm run dev:mcp-server
+```
+
+Required MCP-side environment variables:
+
+- `WIKI_DAEMON_BASE_URL`: base URL of the wiki daemon, for example `http://127.0.0.1:8787`
+- `WIKI_MCP_HOST`: bind host for the MCP HTTP server, default `127.0.0.1`
+- `WIKI_MCP_PORT`: bind port for the MCP HTTP server, default random free port
+- `WIKI_MCP_PATH`: MCP route path, default `/mcp`
+
+## Using the MCP From Clients
+
+Any MCP client that supports Streamable HTTP can connect to the MCP endpoint:
+
+- Local debug endpoint: `http://127.0.0.1:9400/mcp`
+- Health check: `http://127.0.0.1:9400/health`
+- Production recommendation: expose `/mcp` behind a reverse proxy and keep daemon/MCP bound to loopback
+
+Read tools can be called directly. Write tools such as `wiki_page_create`, `wiki_page_update`, and `wiki_sync` require these headers:
+
+- `x-wiki-actor-id`
+- `x-wiki-actor-type`
+- `x-request-id`
+
+In production, the recommended model is: the client sends `Authorization: Bearer ...` to the reverse proxy, and the proxy injects the actor headers before forwarding to the MCP server. For local debugging without a proxy, your client must send those headers itself when calling write tools.
+
+Minimal Node.js MCP client example:
+
+```ts
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+const transport = new StreamableHTTPClientTransport(new URL("http://127.0.0.1:9400/mcp"), {
+  requestInit: {
+    headers: {
+      "x-wiki-actor-id": "agent:demo",
+      "x-wiki-actor-type": "agent",
+      "x-request-id": "req-demo-1",
+    },
+  },
+});
+
+const client = new Client({ name: "demo-client", version: "1.0.0" });
+await client.connect(transport);
+
+const tools = await client.listTools();
+const search = await client.callTool({
+  name: "wiki_search",
+  arguments: { query: "bayes", limit: 5 },
+});
+```
+
+Current MCP tools include:
+
+- Query: `wiki_find`, `wiki_fts`, `wiki_search`, `wiki_graph`
+- Page: `wiki_page_info`, `wiki_page_read`, `wiki_page_create`, `wiki_page_update`
+- Type: `wiki_type_list`, `wiki_type_show`, `wiki_type_recommend`
+- Vault: `wiki_vault_list`, `wiki_vault_queue`
+- Maintenance: `wiki_sync`, `wiki_lint`
+
 ## CLI
 
 ```
