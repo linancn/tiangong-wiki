@@ -23,6 +23,10 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): {
 export function openRuntimeDb(env: NodeJS.ProcessEnv = process.env) {
   const { paths, config } = loadRuntimeConfig(env);
   const embeddingClient = EmbeddingClient.fromEnv(env);
-  const { db } = openDb(paths.dbPath, config, embeddingClient?.settings.dimensions ?? getEmbeddingDimensionFromEnv(env));
-  return { db, paths, config, embeddingClient };
+  const { db, vectorDimensions, vectorDimensionsChanged } = openDb(
+    paths.dbPath,
+    config,
+    embeddingClient?.settings.dimensions ?? getEmbeddingDimensionFromEnv(env),
+  );
+  return { db, paths, config, embeddingClient, vectorDimensions, vectorDimensionsChanged };
 }

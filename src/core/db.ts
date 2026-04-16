@@ -11,6 +11,8 @@ const FTS_INDEX_VERSION = "2";
 export interface OpenDbResult {
   db: Database.Database;
   configChanged: boolean;
+  vectorDimensions: number | null;
+  vectorDimensionsChanged: boolean;
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
@@ -245,6 +247,20 @@ export function getMeta(db: Database.Database, key: string): string | null {
   return row?.value ?? null;
 }
 
+export function getVectorTableDimensions(db: Database.Database): number | null {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'vec_pages'").get() as
+    | { sql: string | null }
+    | undefined;
+  const sql = row?.sql ?? "";
+  const match = sql.match(/embedding\s+float\[(\d+)\]/i);
+  if (!match) {
+    return null;
+  }
+
+  const dimensions = Number.parseInt(match[1], 10);
+  return Number.isFinite(dimensions) && dimensions > 0 ? dimensions : null;
+}
+
 export function setMeta(db: Database.Database, key: string, value: string | null): void {
   if (value === null) {
     db.prepare("DELETE FROM sync_meta WHERE key = ?").run(key);
@@ -360,6 +376,8 @@ export function openDb(
 
   ensureBaseTables(db, embeddingDimensions);
   ensureFtsTable(db);
+  const vectorDimensions = getVectorTableDimensions(db);
+  const vectorDimensionsChanged = vectorDimensions !== null && vectorDimensions !== embeddingDimensions;
 
   const storedSchemaVersion = getMeta(db, "schema_version");
   if (storedSchemaVersion && storedSchemaVersion !== SCHEMA_VERSION) {
@@ -379,5 +397,5 @@ export function openDb(
     ...(storedConfigVersion === null ? { config_version: config.configVersion } : {}),
   });
 
-  return { db, configChanged };
+  return { db, configChanged, vectorDimensions, vectorDimensionsChanged };
 }

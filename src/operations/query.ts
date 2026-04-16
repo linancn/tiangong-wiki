@@ -367,8 +367,15 @@ export async function searchPages(
 
   const limit = parsePositiveLimit(options.limit, "--limit", 10);
   const [queryEmbedding] = await embeddingClient.embedBatch([options.query]);
-  const { db, config } = openRuntimeDb(env);
+  const { db, config, vectorDimensions, vectorDimensionsChanged } = openRuntimeDb(env);
   try {
+    if (vectorDimensionsChanged) {
+      throw new AppError("Embedding index dimensions changed, run tiangong-wiki sync to rebuild vectors.", "config", {
+        expectedDimensions: embeddingClient.settings.dimensions,
+        actualDimensions: vectorDimensions,
+      });
+    }
+
     const rows = db
       .prepare(
         `

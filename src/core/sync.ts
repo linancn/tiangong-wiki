@@ -124,7 +124,7 @@ export async function syncWorkspace(options: SyncOptions = {}): Promise<SyncResu
   }
   const config = loadConfig(runtimePaths.configPath);
   const embeddingClient = EmbeddingClient.fromEnv(env);
-  const { db, configChanged } = openDb(
+  const { db, configChanged, vectorDimensionsChanged } = openDb(
     runtimePaths.dbPath,
     config,
     embeddingClient?.settings.dimensions ?? getEmbeddingDimension(env),
@@ -138,13 +138,14 @@ export async function syncWorkspace(options: SyncOptions = {}): Promise<SyncResu
     const profileChanged = Boolean(
       embeddingClient && storedEmbeddingProfile && storedEmbeddingProfile !== embeddingClient.profileHash,
     );
+    const embeddingDrift = profileChanged || vectorDimensionsChanged;
 
-    if (mode === "path" && (configChanged || profileChanged)) {
+    if (mode === "path" && (configChanged || embeddingDrift)) {
       mode = "full";
       upgradedToFullSync = true;
     }
 
-    if (profileChanged && options.skipEmbedding) {
+    if (embeddingDrift && options.skipEmbedding) {
       throw new AppError("Embedding profile changed, cannot skip embedding.", "config");
     }
 
@@ -176,7 +177,7 @@ export async function syncWorkspace(options: SyncOptions = {}): Promise<SyncResu
     }
 
     let embedAll = false;
-    if (embeddingClient && profileChanged) {
+    if (embeddingClient && embeddingDrift) {
       resetVectorTable(db, embeddingClient.settings.dimensions);
       db.prepare("UPDATE pages SET embedding_status = 'pending'").run();
       embedAll = true;
@@ -239,7 +240,7 @@ export async function syncWorkspace(options: SyncOptions = {}): Promise<SyncResu
       mode,
       upgradedToFullSync,
       configChanged,
-      profileChanged,
+      profileChanged: embeddingDrift,
       inserted: applyResult.inserted.length,
       updated: applyResult.updated.length,
       deleted: applyResult.deleted.length,

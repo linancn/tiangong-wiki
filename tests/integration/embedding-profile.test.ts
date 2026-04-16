@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { loadConfig } from "../../src/core/config.js";
+import { openDb, setMeta } from "../../src/core/db.js";
+import { EmbeddingClient } from "../../src/core/embedding.js";
+import { resolveRuntimePaths } from "../../src/core/paths.js";
 import {
   bootstrapRuntimeAssets,
   cleanupWorkspace,
@@ -171,5 +175,47 @@ describe("embedding profile behavior", () => {
     expect(sync.embedding.succeeded).toBe(2);
     expect(sync.embedding.failed).toBe(0);
     expect(dbScalar<number>(workspace, "SELECT COUNT(*) FROM vec_pages")).toBe(2);
+  });
+
+  it("rebuilds stale vector tables when stored embedding profile matches the current env", async () => {
+    const server = await startEmbeddingServer(4);
+    servers.push(server);
+
+    const workspace = createWorkspace({
+      EMBEDDING_BASE_URL: server.url,
+      EMBEDDING_API_KEY: "test-key",
+      EMBEDDING_MODEL: "model-a",
+      EMBEDDING_DIMENSIONS: "4",
+    });
+    workspaces.push(workspace);
+    bootstrapRuntimeAssets(workspace);
+    seedConceptPages(workspace, 2);
+
+    const runtimePaths = resolveRuntimePaths(workspace.env);
+    const config = loadConfig(runtimePaths.configPath);
+    const { db } = openDb(runtimePaths.dbPath, config, 2);
+    try {
+      setMeta(db, "embedding_profile", EmbeddingClient.fromEnv(workspace.env)!.profileHash);
+    } finally {
+      db.close();
+    }
+
+    const searchBeforeRepair = runCli(["search", "uncertainty reduction"], workspace.env, { allowFailure: true });
+    expect(searchBeforeRepair.status).toBe(2);
+    expect(`${searchBeforeRepair.stdout}\n${searchBeforeRepair.stderr}`).toContain(
+      "run tiangong-wiki sync to rebuild vectors",
+    );
+
+    const sync = runCliJson<{ profileChanged: boolean; embedding: { embedAll: boolean; succeeded: number } }>(
+      ["sync"],
+      workspace.env,
+    );
+    expect(sync.profileChanged).toBe(true);
+    expect(sync.embedding.embedAll).toBe(true);
+    expect(sync.embedding.succeeded).toBe(2);
+    expect(dbScalar<string>(workspace, "SELECT sql FROM sqlite_master WHERE name = 'vec_pages'")).toContain("float[4]");
+
+    const searchAfterRepair = runCliJson<Array<{ id: string }>>(["search", "uncertainty reduction"], workspace.env);
+    expect(searchAfterRepair[0]?.id).toBe("concepts/concept-01.md");
   });
 });
