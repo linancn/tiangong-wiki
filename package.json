@@ -23,6 +23,7 @@
   "files": [
     "dist",
     "mcp-server/dist",
+    "mcp-server/package.json",
     "assets",
     "references",
     "agents",
