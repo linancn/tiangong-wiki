@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import packageJson from "../package.json" with { type: "json" };
+import packageJson from "../../package.json" with { type: "json" };
 import { DaemonHttpError, requestDaemonJson } from "./daemon-client.js";
 
 type IncomingHeaders = Record<string, string | string[] | undefined>;
