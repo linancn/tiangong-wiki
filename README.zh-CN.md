@@ -89,9 +89,23 @@ tiangong-wiki sync                                    # 索引 Markdown 文件
 ```bash
 tiangong-wiki find --type concept --status active     # 结构化查询
 tiangong-wiki fts "贝叶斯"                             # 全文搜索
+tiangong-wiki rebuild-fts --check                     # 检查 FTS 漂移 / 元数据
+tiangong-wiki rebuild-fts                             # 显式重建 FTS 索引
 tiangong-wiki search "优化算法的收敛条件"                # 语义搜索
 tiangong-wiki graph bayes-theorem --depth 2           # 图遍历
 ```
+
+`wiki.config.json` 现在支持：
+
+```json
+{
+  "fts": {
+    "tokenizer": "default"
+  }
+}
+```
+
+将 `tokenizer` 设为 `simple` 后，全文搜索会启用内置的 `wangfenjin/simple` SQLite 扩展，从而支持更好的中文和拼音检索。
 
 ```bash
 tiangong-wiki daemon start                            # 后台启动 daemon

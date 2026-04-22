@@ -1,17 +1,21 @@
 import type { CodexWorkflowRunner } from "../core/codex-workflow.js";
 import { getTemplate } from "../core/config.js";
+import { inspectFtsIndex, openDb, rebuildFts as rebuildFtsIndex } from "../core/db.js";
+import { createFtsTable, FTS_INDEX_VERSION } from "../core/fts.js";
 import { resolveAgentSettings } from "../core/paths.js";
 import { normalizePageId } from "../core/paths.js";
 import { createPageFromTemplate } from "../core/page-files.js";
 import { updatePageById } from "../core/page-files.js";
 import { readCanonicalPageSourceById, type CanonicalPageSource } from "../core/page-source.js";
-import { loadRuntimeConfig } from "../core/runtime.js";
+import { getEmbeddingDimensionFromEnv, loadRuntimeConfig } from "../core/runtime.js";
 import { openRuntimeDb } from "../core/runtime.js";
 import { syncWorkspace, type SyncOptions } from "../core/sync.js";
 import { getVaultQueueItem, processVaultQueueBatch, type QueueProcessResult } from "../core/vault-processing.js";
+import type { FtsTokenizerMode, LoadedWikiConfig } from "../types/config.js";
 import { selectPageById } from "../core/query.js";
 import type { SyncResult, VaultQueueStatus } from "../types/page.js";
 import { AppError, asAppError } from "../utils/errors.js";
+import { pathExistsSync } from "../utils/fs.js";
 
 export interface CreatePageOptions {
   type: string;
@@ -45,8 +49,47 @@ export interface SyncCommandResult extends SyncResult {
   queueProcess: SyncQueueProcessResult | null;
 }
 
+export interface RebuildFtsCommandOptions {
+  mode?: FtsTokenizerMode;
+  check?: boolean;
+}
+
+export interface RebuildFtsCommandResult {
+  checked: boolean;
+  rebuilt: boolean;
+  mode: FtsTokenizerMode;
+  rowCount: number;
+  expectedIndexVersion: string;
+  storedIndexVersion: string | null;
+  storedTokenizerMode: string | null;
+  storedExtensionVersion: string | null;
+  extensionVersion: string | null;
+  simpleExtensionPath: string | null;
+  lastRebuildAt: string | null;
+  needsRecreate: boolean;
+  needsRebuild: boolean;
+  problems: string[];
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === "[object Object]";
+}
+
+function applyFtsModeOverride(
+  config: LoadedWikiConfig,
+  mode: FtsTokenizerMode | undefined,
+): LoadedWikiConfig {
+  if (!mode || config.fts.tokenizer === mode) {
+    return config;
+  }
+
+  return {
+    ...config,
+    fts: {
+      ...config.fts,
+      tokenizer: mode,
+    },
+  };
 }
 
 function assertValidSyncCommandOptions(options: RunSyncCommandOptions): void {
@@ -206,6 +249,78 @@ export async function runSyncCommand(
       workflowRunner: options.workflowRunner,
     }),
   };
+}
+
+export function rebuildFtsCommand(
+  env: NodeJS.ProcessEnv = process.env,
+  options: RebuildFtsCommandOptions = {},
+): RebuildFtsCommandResult {
+  const { paths, config } = loadRuntimeConfig(env);
+  const effectiveConfig = applyFtsModeOverride(config, options.mode);
+
+  if (!pathExistsSync(paths.dbPath)) {
+    return {
+      checked: true,
+      rebuilt: false,
+      mode: effectiveConfig.fts.tokenizer,
+      rowCount: 0,
+      expectedIndexVersion: FTS_INDEX_VERSION,
+      storedIndexVersion: null,
+      storedTokenizerMode: null,
+      storedExtensionVersion: null,
+      extensionVersion: null,
+      simpleExtensionPath: null,
+      lastRebuildAt: null,
+      needsRecreate: true,
+      needsRebuild: true,
+      problems: [`Wiki database does not exist yet: ${paths.dbPath}`],
+    };
+  }
+
+  const { db, ftsExtensionVersion, simpleExtensionPath, initialFtsInspection } = openDb(
+    paths.dbPath,
+    effectiveConfig,
+    getEmbeddingDimensionFromEnv(env),
+    paths.packageRoot,
+    {
+      ensureFts: false,
+    },
+  );
+
+  try {
+    if (!options.check) {
+      if (initialFtsInspection.needsRecreate) {
+        if (initialFtsInspection.hasTable) {
+          db.exec("DROP TABLE pages_fts");
+        }
+        createFtsTable(db, effectiveConfig.fts.tokenizer);
+      }
+      rebuildFtsIndex(db, effectiveConfig, ftsExtensionVersion);
+    }
+
+    const inspection = options.check
+      ? initialFtsInspection
+      : inspectFtsIndex(db, effectiveConfig, ftsExtensionVersion);
+
+    return {
+      checked: true,
+      rebuilt: options.check ? false : true,
+      mode: effectiveConfig.fts.tokenizer,
+      rowCount: inspection.rowCount,
+      expectedIndexVersion: inspection.expectedIndexVersion,
+      storedIndexVersion: inspection.storedIndexVersion,
+      storedTokenizerMode: inspection.storedTokenizerMode,
+      storedExtensionVersion: inspection.storedExtensionVersion,
+      extensionVersion: ftsExtensionVersion,
+      simpleExtensionPath,
+      lastRebuildAt: inspection.lastRebuildAt,
+      needsRecreate: inspection.needsRecreate,
+      needsRebuild: inspection.needsRebuild,
+      problems: inspection.problems,
+    };
+  } finally {
+    db.close();
+  }
 }
 
 export async function createPage(

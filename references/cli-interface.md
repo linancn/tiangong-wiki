@@ -35,6 +35,7 @@ Global workspace resolution priority:
 | `find` | Query pages by structured metadata filters |
 | `search` | Semantic search over page summary embeddings |
 | `fts` | Full-text search over title, tags, and summary text |
+| `rebuild-fts` | Inspect or rebuild the SQLite FTS index |
 | `graph` | Traverse the knowledge graph from a root node |
 | `page-info` | Show full metadata and edges for a single page |
 | `list` | List wiki pages |
@@ -157,6 +158,31 @@ tiangong-wiki fts <query> [--type <pageType>] [--limit <n>]
 ```
 
 Full-text search against the `pages_fts` table (title, tags, summary_text). Default limit: 20.
+
+`wiki.config.json` can set:
+
+```json
+{
+  "fts": {
+    "tokenizer": "default"
+  }
+}
+```
+
+Use `simple` to enable the bundled `wangfenjin/simple` tokenizer for Chinese and pinyin-aware matching.
+
+### rebuild-fts
+
+```
+tiangong-wiki rebuild-fts [--mode <default|simple>] [--check]
+```
+
+Inspects or rebuilds the `pages_fts` table and its metadata. Useful after changing `wiki.config.json` FTS tokenizer mode, repairing drift, or forcing a clean rebuild.
+
+Options:
+
+- `--mode <default|simple>` — temporarily override the configured tokenizer mode for this command
+- `--check` — report drift and metadata without rebuilding
 
 ### graph
 

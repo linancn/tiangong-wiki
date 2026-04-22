@@ -9,6 +9,7 @@ import {
   readJson,
   readMeta,
   runCli,
+  updateWikiConfig,
   workspaceDbPath,
   writePage,
 } from "../helpers.js";
@@ -137,7 +138,7 @@ Classification models support product decisions with fresh evidence.
 
     const migratedResult = readJson<Array<{ id: string }>>(runCli(["fts", "开发"], workspace.env).stdout);
     expect(migratedResult.map((item) => item.id)).toContain("concepts/dev-env.md");
-    expect(readMeta(workspace, "fts_index_version")).toBe("2");
+    expect(readMeta(workspace, "fts_index_version")).toBe("3");
 
     const migratedSegmentedSummary = dbScalar<string>(
       workspace,
@@ -150,5 +151,99 @@ Classification models support product decisions with fresh evidence.
       ["concepts/dev-env.md"],
     );
     expect(migratedSegmentedSummary).toMatch(/开发\s+环境/);
+  });
+
+  it("supports bundled simple tokenizer, pinyin queries, and rebuild checks", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    bootstrapRuntimeAssets(workspace);
+    updateWikiConfig(workspace, (config) => {
+      config.fts = { tokenizer: "simple" };
+    });
+
+    writePage(
+      workspace,
+      "concepts/dev-env.md",
+      `---
+pageType: concept
+title: 开发环境配置
+nodeId: dev-env-setup
+status: active
+visibility: shared
+sourceRefs: []
+relatedPages: []
+tags:
+  - 开发
+  - AI
+createdAt: 2026-04-07
+updatedAt: 2026-04-07
+confidence: high
+masteryLevel: high
+prerequisites: []
+---
+
+开发环境配置说明，适合 AI 工程项目。
+`,
+    );
+
+    const initResult = readJson<{ initialized: boolean }>(runCli(["init"], workspace.env).stdout);
+    expect(initResult.initialized).toBe(true);
+
+    const phraseResult = readJson<Array<{ id: string }>>(runCli(["fts", "开发环境"], workspace.env).stdout);
+    expect(phraseResult.map((item) => item.id)).toContain("concepts/dev-env.md");
+
+    const pinyinResult = readJson<Array<{ id: string }>>(runCli(["fts", "kaifa"], workspace.env).stdout);
+    expect(pinyinResult.map((item) => item.id)).toContain("concepts/dev-env.md");
+
+    const naturalFtsSummary = dbScalar<string>(
+      workspace,
+      `
+        SELECT pages_fts.summary_text
+        FROM pages_fts
+        JOIN pages ON pages.rowid = pages_fts.rowid
+        WHERE pages.id = ?
+      `,
+      ["concepts/dev-env.md"],
+    );
+    expect(naturalFtsSummary).toContain("开发环境配置说明");
+    expect(naturalFtsSummary).not.toMatch(/开发\s+环境/);
+
+    const healthyCheck = readJson<{
+      mode: string;
+      rebuilt: boolean;
+      needsRebuild: boolean;
+      simpleExtensionPath: string | null;
+    }>(runCli(["rebuild-fts", "--check"], workspace.env).stdout);
+    expect(healthyCheck.mode).toBe("simple");
+    expect(healthyCheck.rebuilt).toBe(false);
+    expect(healthyCheck.needsRebuild).toBe(false);
+    expect(healthyCheck.simpleExtensionPath).toBeTruthy();
+
+    updateWikiConfig(workspace, (config) => {
+      config.fts = { tokenizer: "default" };
+    });
+
+    const driftCheck = readJson<{
+      mode: string;
+      needsRebuild: boolean;
+      problems: string[];
+    }>(runCli(["rebuild-fts", "--check"], workspace.env).stdout);
+    expect(driftCheck.mode).toBe("default");
+    expect(driftCheck.needsRebuild).toBe(true);
+    expect(driftCheck.problems.join("\n")).toContain("fts_tokenizer_mode mismatch");
+
+    const rebuilt = readJson<{
+      rebuilt: boolean;
+      mode: string;
+      needsRebuild: boolean;
+    }>(runCli(["rebuild-fts"], workspace.env).stdout);
+    expect(rebuilt.rebuilt).toBe(true);
+    expect(rebuilt.mode).toBe("default");
+    expect(rebuilt.needsRebuild).toBe(false);
+
+    const postRebuildCheck = readJson<{ needsRebuild: boolean }>(
+      runCli(["rebuild-fts", "--check"], workspace.env).stdout,
+    );
+    expect(postRebuildCheck.needsRebuild).toBe(false);
   });
 });

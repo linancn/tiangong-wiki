@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { getMeta } from "../core/db.js";
+import { buildFtsQueryPlan } from "../core/fts.js";
 import { parsePage } from "../core/frontmatter.js";
 import { normalizePageId, resolvePagePath } from "../core/paths.js";
 import { compactPageSummary } from "../core/presenters.js";
@@ -13,7 +14,6 @@ import type { LintItem, LintResult, VaultQueueStatus } from "../types/page.js";
 import { camelToSnake } from "../utils/case.js";
 import { AppError } from "../utils/errors.js";
 import { listFilesRecursiveSync, pathExistsSync } from "../utils/fs.js";
-import { normalizeFtsQuery } from "../utils/segmenter.js";
 
 type Direction = "outgoing" | "incoming" | "both";
 
@@ -412,20 +412,20 @@ export function ftsSearchPages(
   const { db, config } = openRuntimeDb(env);
   try {
     const limit = parsePositiveLimit(options.limit, "--limit", 20);
-    const normalizedQuery = normalizeFtsQuery(options.query);
+    const queryPlan = buildFtsQueryPlan(options.query, config.fts.tokenizer);
     const rows = db
       .prepare(
         `
           SELECT ${listPageColumns(config).map((column) => `pages.${column}`).join(", ")}, bm25(pages_fts) AS rank
           FROM pages_fts
           JOIN pages ON pages.rowid = pages_fts.rowid
-          WHERE pages_fts MATCH ?
+          WHERE ${queryPlan.whereClause}
           ${options.type ? "AND pages.page_type = ?" : ""}
           ORDER BY rank
           LIMIT ?
         `,
       )
-      .all(...(options.type ? [normalizedQuery, options.type, limit] : [normalizedQuery, limit])) as Array<
+      .all(...(options.type ? [...queryPlan.params, options.type, limit] : [...queryPlan.params, limit])) as Array<
       Record<string, unknown>
     >;
 

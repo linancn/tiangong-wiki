@@ -294,6 +294,7 @@ export type DaemonLaunchMode = "run" | "start";
 export type DaemonTask =
   | "idle"
   | "sync"
+  | "rebuild-fts"
   | "sync-trigger"
   | "cycle"
   | "create"

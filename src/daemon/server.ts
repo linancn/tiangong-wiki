@@ -53,7 +53,7 @@ import {
   showType,
 } from "../operations/type-template.js";
 import { runTemplateLint } from "../operations/template-lint.js";
-import { createPage, runSync, runSyncCommand, updatePage } from "../operations/write.js";
+import { createPage, rebuildFtsCommand, runSync, runSyncCommand, updatePage } from "../operations/write.js";
 import type {
   DaemonLaunchMode,
   DaemonState,
@@ -826,6 +826,31 @@ export async function runDaemonServer(options: {
     }
   };
 
+  const runRebuildFtsTransaction = async (
+    actor: WriteActorMetadata,
+    input: { mode?: "default" | "simple" },
+  ) => {
+    try {
+      const result = rebuildFtsCommand(env, input);
+      return await finalizeJournaledWrite(actor, {
+        operation: "rebuild-fts",
+        resourceId: "pages_fts",
+        revisionBefore: null,
+        revisionAfter: null,
+        result,
+      });
+    } catch (error) {
+      const appError = asAppError(error);
+      return recordSyncFailureAndThrow(actor, {
+        operation: "rebuild-fts",
+        resourceId: "pages_fts",
+        revisionBefore: null,
+        revisionAfter: null,
+        error: appError,
+      });
+    }
+  };
+
   const runCycleTransaction = async (
     actor: WriteActorMetadata,
     task: Extract<DaemonTask, "cycle" | "sync-trigger">,
@@ -975,6 +1000,28 @@ export async function runDaemonServer(options: {
         const result = await enqueueWriteTask("sync-trigger", () => runCycleTransaction(actor, "sync-trigger"), {
           summarizeResult: summarizeCycleResult,
         });
+        writeJsonResponse(response, 200, result);
+        return;
+      }
+
+      if (method === "POST" && pathname === "/fts/rebuild") {
+        const body = await readJsonBody(request);
+        const actor = resolveWriteActor(request, body, buildCliWriteActor(env));
+        const result = await enqueueWriteTask(
+          "rebuild-fts",
+          () =>
+            runRebuildFtsTransaction(actor, {
+              mode: body.mode === "simple" ? "simple" : body.mode === "default" ? "default" : undefined,
+            }),
+          {
+            summarizeResult: (payload: any) => ({
+              rebuilt: payload.rebuilt,
+              mode: payload.mode,
+              rowCount: payload.rowCount,
+              needsRebuild: payload.needsRebuild,
+            }),
+          },
+        );
         writeJsonResponse(response, 200, result);
         return;
       }
@@ -1174,6 +1221,22 @@ export async function runDaemonServer(options: {
             query: url.searchParams.get("query") ?? "",
             type: url.searchParams.get("type") ?? undefined,
             limit: url.searchParams.get("limit") ?? undefined,
+          }),
+        );
+        return;
+      }
+
+      if (method === "GET" && pathname === "/fts/rebuild") {
+        writeJsonResponse(
+          response,
+          200,
+          rebuildFtsCommand(env, {
+            mode: url.searchParams.get("mode") === "simple"
+              ? "simple"
+              : url.searchParams.get("mode") === "default"
+                ? "default"
+                : undefined,
+            check: url.searchParams.get("check") === "true",
           }),
         );
         return;

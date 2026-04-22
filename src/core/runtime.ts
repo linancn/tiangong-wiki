@@ -27,6 +27,7 @@ export function openRuntimeDb(env: NodeJS.ProcessEnv = process.env) {
     paths.dbPath,
     config,
     embeddingClient?.settings.dimensions ?? getEmbeddingDimensionFromEnv(env),
+    paths.packageRoot,
   );
   return { db, paths, config, embeddingClient, vectorDimensions, vectorDimensionsChanged };
 }

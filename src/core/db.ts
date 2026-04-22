@@ -1,18 +1,28 @@
 import Database from "better-sqlite3";
-import * as sqliteVec from "sqlite-vec";
 
 import type { LoadedWikiConfig } from "../types/config.js";
+import {
+  buildFtsRow,
+  createFtsTable,
+  ftsTableMatchesMode,
+  FTS_INDEX_VERSION,
+  isLegacyExternalContentFts,
+  type FtsInspectionResult,
+} from "./fts.js";
+import { loadSqliteExtensions } from "./sqlite-extensions.js";
 import { AppError } from "../utils/errors.js";
-import { segmentForFts } from "../utils/segmenter.js";
+import { toOffsetIso } from "../utils/time.js";
 
 export const SCHEMA_VERSION = "1";
-const FTS_INDEX_VERSION = "2";
 
 export interface OpenDbResult {
   db: Database.Database;
   configChanged: boolean;
   vectorDimensions: number | null;
   vectorDimensionsChanged: boolean;
+  ftsExtensionVersion: string | null;
+  simpleExtensionPath: string | null;
+  initialFtsInspection: FtsInspectionResult;
 }
 
 function tableExists(db: Database.Database, tableName: string): boolean {
@@ -45,55 +55,6 @@ function ensureTableColumns(
       db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
     }
   }
-}
-
-function createFtsTable(db: Database.Database): void {
-  db.exec(`
-    CREATE VIRTUAL TABLE pages_fts USING fts5(
-      title,
-      tags,
-      summary_text
-    );
-  `);
-}
-
-function normalizeTagsForFts(rawTags: string | null): string {
-  if (!rawTags) {
-    return "";
-  }
-
-  try {
-    const parsed = JSON.parse(rawTags) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((value) => String(value).trim())
-        .filter(Boolean)
-        .join(" ");
-    }
-  } catch {
-    // Fall back to the stored value if legacy data is not valid JSON.
-  }
-
-  return rawTags;
-}
-
-function buildFtsRow(row: {
-  rowid: number;
-  title: string;
-  tags: string | null;
-  summaryText: string | null;
-}): { rowid: number; title: string; tags: string; summary_text: string } {
-  return {
-    rowid: row.rowid,
-    title: segmentForFts(row.title),
-    tags: segmentForFts(normalizeTagsForFts(row.tags)),
-    summary_text: segmentForFts(row.summaryText ?? ""),
-  };
-}
-
-function isLegacyExternalContentFts(db: Database.Database): boolean {
-  const sql = getTableSql(db, "pages_fts");
-  return typeof sql === "string" && /content\s*=\s*'pages'/i.test(sql);
 }
 
 function ensureBaseTables(db: Database.Database, embeddingDimensions: number): void {
@@ -287,7 +248,7 @@ export function setMetaValues(db: Database.Database, values: Record<string, stri
   transaction(values);
 }
 
-export function rebuildFts(db: Database.Database): void {
+export function rebuildFts(db: Database.Database, config: LoadedWikiConfig, extensionVersion: string | null): void {
   if (!tableExists(db, "pages_fts")) {
     return;
   }
@@ -308,30 +269,98 @@ export function rebuildFts(db: Database.Database): void {
   const transaction = db.transaction(() => {
     clearStatement.run();
     for (const row of rows) {
-      insertStatement.run(buildFtsRow(row));
+      insertStatement.run(buildFtsRow(row, config.fts.tokenizer));
     }
   });
 
   transaction();
+  setMetaValues(db, {
+    fts_index_version: FTS_INDEX_VERSION,
+    fts_tokenizer_mode: config.fts.tokenizer,
+    fts_extension_version: extensionVersion,
+    fts_last_rebuild_at: toOffsetIso(),
+  });
 }
 
-function ensureFtsTable(db: Database.Database): void {
+export function inspectFtsIndex(
+  db: Database.Database,
+  config: LoadedWikiConfig,
+  extensionVersion: string | null,
+): FtsInspectionResult {
   const hasTable = tableExists(db, "pages_fts");
-  const storedFtsIndexVersion = getMeta(db, "fts_index_version");
-  const needsRecreate = !hasTable || isLegacyExternalContentFts(db);
-  const needsRebuild = needsRecreate || storedFtsIndexVersion !== FTS_INDEX_VERSION;
+  const tableSql = hasTable ? getTableSql(db, "pages_fts") : null;
+  const storedIndexVersion = getMeta(db, "fts_index_version");
+  const storedTokenizerMode = getMeta(db, "fts_tokenizer_mode");
+  const storedExtensionVersion = getMeta(db, "fts_extension_version");
+  const lastRebuildAt = getMeta(db, "fts_last_rebuild_at");
+  const rowCount = hasTable
+    ? ((db.prepare("SELECT COUNT(*) AS count FROM pages_fts").get() as { count: number } | undefined)?.count ?? 0)
+    : 0;
 
-  if (needsRecreate && hasTable) {
+  const problems: string[] = [];
+  const needsRecreate = !hasTable || isLegacyExternalContentFts(tableSql) || !ftsTableMatchesMode(tableSql, config.fts.tokenizer);
+  if (!hasTable) {
+    problems.push("pages_fts table is missing.");
+  } else if (isLegacyExternalContentFts(tableSql)) {
+    problems.push("pages_fts uses the legacy external-content schema.");
+  } else if (!ftsTableMatchesMode(tableSql, config.fts.tokenizer)) {
+    problems.push(`pages_fts tokenizer schema does not match configured mode ${config.fts.tokenizer}.`);
+  }
+
+  let needsRebuild = needsRecreate;
+  if (storedIndexVersion !== FTS_INDEX_VERSION) {
+    problems.push(
+      storedIndexVersion === null
+        ? "fts_index_version metadata is missing."
+        : `fts_index_version mismatch: expected ${FTS_INDEX_VERSION}, found ${storedIndexVersion}.`,
+    );
+    needsRebuild = true;
+  }
+  if (storedTokenizerMode !== config.fts.tokenizer) {
+    problems.push(
+      storedTokenizerMode === null
+        ? "fts_tokenizer_mode metadata is missing."
+        : `fts_tokenizer_mode mismatch: expected ${config.fts.tokenizer}, found ${storedTokenizerMode}.`,
+    );
+    needsRebuild = true;
+  }
+  if (storedExtensionVersion !== extensionVersion) {
+    if (!(storedExtensionVersion === null && extensionVersion === null)) {
+      problems.push(
+        storedExtensionVersion === null
+          ? `fts_extension_version metadata is missing for configured mode ${config.fts.tokenizer}.`
+          : `fts_extension_version mismatch: expected ${extensionVersion ?? "null"}, found ${storedExtensionVersion}.`,
+      );
+      needsRebuild = true;
+    }
+  }
+
+  return {
+    mode: config.fts.tokenizer,
+    hasTable,
+    rowCount,
+    expectedIndexVersion: FTS_INDEX_VERSION,
+    storedIndexVersion,
+    storedTokenizerMode,
+    storedExtensionVersion,
+    lastRebuildAt,
+    needsRecreate,
+    needsRebuild,
+    problems,
+  };
+}
+
+function ensureFtsTable(db: Database.Database, config: LoadedWikiConfig, extensionVersion: string | null): void {
+  const inspection = inspectFtsIndex(db, config, extensionVersion);
+
+  if (inspection.needsRecreate && inspection.hasTable) {
     db.exec("DROP TABLE pages_fts");
   }
-  if (needsRecreate) {
-    createFtsTable(db);
+  if (inspection.needsRecreate) {
+    createFtsTable(db, config.fts.tokenizer);
   }
-  if (needsRebuild) {
-    rebuildFts(db);
-  }
-  if (needsRebuild || storedFtsIndexVersion !== FTS_INDEX_VERSION) {
-    setMeta(db, "fts_index_version", FTS_INDEX_VERSION);
+  if (inspection.needsRebuild) {
+    rebuildFts(db, config, extensionVersion);
   }
 }
 
@@ -346,7 +375,11 @@ export function resetVectorTable(db: Database.Database, embeddingDimensions: num
   `);
 }
 
-export function clearAllIndexedData(db: Database.Database): void {
+export function clearAllIndexedData(
+  db: Database.Database,
+  config: LoadedWikiConfig,
+  extensionVersion: string | null,
+): void {
   db.exec(`
     DELETE FROM edges;
     DELETE FROM pages;
@@ -358,7 +391,7 @@ export function clearAllIndexedData(db: Database.Database): void {
     db.exec("DELETE FROM vec_pages");
   }
   if (tableExists(db, "pages_fts")) {
-    rebuildFts(db);
+    rebuildFts(db, config, extensionVersion);
   }
   db.prepare(
     "DELETE FROM sync_meta WHERE key IN ('last_sync_at', 'last_sync_id', 'last_full_rebuild_at', 'embedding_profile')",
@@ -369,14 +402,22 @@ export function openDb(
   dbPath: string,
   config: LoadedWikiConfig,
   embeddingDimensions: number,
+  packageRoot: string,
+  options: {
+    ensureFts?: boolean;
+  } = {},
 ): OpenDbResult {
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
-  sqliteVec.load(db);
+  const extensionResult = loadSqliteExtensions(db, config, packageRoot);
+  const ftsMetadataExtensionVersion = config.fts.tokenizer === "simple" ? extensionResult.loadedSimpleVersion : null;
 
   ensureBaseTables(db, embeddingDimensions);
-  ensureFtsTable(db);
+  const initialFtsInspection = inspectFtsIndex(db, config, ftsMetadataExtensionVersion);
+  if (options.ensureFts !== false) {
+    ensureFtsTable(db, config, ftsMetadataExtensionVersion);
+  }
   const vectorDimensions = getVectorTableDimensions(db);
   const vectorDimensionsChanged = vectorDimensions !== null && vectorDimensions !== embeddingDimensions;
 
@@ -398,5 +439,13 @@ export function openDb(
     ...(storedConfigVersion === null ? { config_version: config.configVersion } : {}),
   });
 
-  return { db, configChanged, vectorDimensions, vectorDimensionsChanged };
+  return {
+    db,
+    configChanged,
+    vectorDimensions,
+    vectorDimensionsChanged,
+    ftsExtensionVersion: ftsMetadataExtensionVersion,
+    simpleExtensionPath: extensionResult.simpleExtensionPath,
+    initialFtsInspection,
+  };
 }

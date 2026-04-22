@@ -89,9 +89,23 @@ That means commands still work best from inside a workspace, but they can also r
 ```bash
 tiangong-wiki find --type concept --status active     # structured query
 tiangong-wiki fts "Bayesian"                          # full-text search
+tiangong-wiki rebuild-fts --check                     # inspect FTS drift / metadata
+tiangong-wiki rebuild-fts                             # rebuild FTS index explicitly
 tiangong-wiki search "convergence conditions"         # semantic search
 tiangong-wiki graph bayes-theorem --depth 2           # graph traversal
 ```
+
+`wiki.config.json` now supports:
+
+```json
+{
+  "fts": {
+    "tokenizer": "default"
+  }
+}
+```
+
+Set `tokenizer` to `simple` to enable the bundled `wangfenjin/simple` SQLite extension for Chinese and pinyin-aware full-text search.
 
 ```bash
 tiangong-wiki daemon start                            # start the daemon in the background

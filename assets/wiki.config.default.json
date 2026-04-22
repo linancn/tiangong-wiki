@@ -1,5 +1,8 @@
 {
   "schemaVersion": 1,
+  "fts": {
+    "tokenizer": "default"
+  },
   "customColumns": {},
   "defaultSummaryFields": [
     "title",

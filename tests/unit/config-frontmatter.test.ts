@@ -20,6 +20,7 @@ describe("config and frontmatter", () => {
     bootstrapRuntimeAssets(workspace);
 
     const config = loadConfig(path.join(workspace.wikiRoot, "wiki.config.json"));
+    expect(config.fts.tokenizer).toBe("default");
     expect(config.vaultFileTypes).toEqual([...DEFAULT_VAULT_FILE_TYPES]);
     const filePath = writePage(
       workspace,
@@ -106,6 +107,26 @@ title: Bad Page
 
     const config = loadConfig(path.join(workspace.wikiRoot, "wiki.config.json"));
     expect(config.vaultFileTypes).toEqual(["pdf", "txt", "yaml"]);
+  });
+
+  it("validates fts tokenizer mode in wiki.config.json", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    bootstrapRuntimeAssets(workspace);
+    updateWikiConfig(workspace, (config) => {
+      config.fts = { tokenizer: "simple" };
+    });
+
+    const config = loadConfig(path.join(workspace.wikiRoot, "wiki.config.json"));
+    expect(config.fts.tokenizer).toBe("simple");
+
+    updateWikiConfig(workspace, (current) => {
+      current.fts = { tokenizer: "unsupported" };
+    });
+
+    expect(() => loadConfig(path.join(workspace.wikiRoot, "wiki.config.json"))).toThrow(
+      'fts.tokenizer must be "default" or "simple"',
+    );
   });
 
   it("normalizes ISO date strings and falls back missing dates to today", () => {

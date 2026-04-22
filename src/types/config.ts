@@ -1,4 +1,9 @@
 export type SqliteColumnType = "text" | "integer" | "real" | "numeric" | "blob";
+export type FtsTokenizerMode = "default" | "simple";
+
+export interface FtsConfig {
+  tokenizer: FtsTokenizerMode;
+}
 
 export interface EdgeRule {
   edgeType: string;
@@ -15,6 +20,7 @@ export interface TemplateConfig {
 
 export interface WikiConfig {
   schemaVersion: number;
+  fts: FtsConfig;
   customColumns: Record<string, SqliteColumnType>;
   defaultSummaryFields: string[];
   vaultFileTypes: string[];

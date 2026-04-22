@@ -1086,7 +1086,7 @@ export function getVaultQueueSnapshot(
 } {
   const paths = resolveRuntimePaths(env);
   const config = loadConfig(paths.configPath);
-  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384);
+  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384, paths.packageRoot);
 
   try {
     const items = fetchQueueItemsByStatus(db, status);
@@ -1121,7 +1121,7 @@ export function getVaultQueueItem(
 ): VaultQueueItem | null {
   const paths = resolveRuntimePaths(env);
   const config = loadConfig(paths.configPath);
-  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384);
+  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384, paths.packageRoot);
 
   try {
     return fetchQueueItemByFileId(db, fileId);
@@ -1154,7 +1154,7 @@ export async function processVaultQueueBatch(
 
   const paths = resolveRuntimePaths(env);
   const config = loadConfig(paths.configPath);
-  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384);
+  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384, paths.packageRoot);
 
   try {
     const result: QueueProcessResult = {

@@ -18,6 +18,7 @@ import { registerInitCommand } from "./commands/init.js";
 import { registerLintCommand } from "./commands/lint.js";
 import { registerListCommand } from "./commands/list.js";
 import { registerPageInfoCommand } from "./commands/page-info.js";
+import { registerRebuildFtsCommand } from "./commands/rebuild-fts.js";
 import { registerSearchCommand } from "./commands/search.js";
 import { registerSetupCommand } from "./commands/setup.js";
 import { registerSkillCommand } from "./commands/skill.js";
@@ -89,6 +90,7 @@ function buildProgram(): Command {
   registerFindCommand(program, runtimeConfig);
   registerSearchCommand(program);
   registerFtsCommand(program);
+  registerRebuildFtsCommand(program);
   registerGraphCommand(program);
   registerPageInfoCommand(program);
   registerListCommand(program);

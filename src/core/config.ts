@@ -5,6 +5,7 @@ import { camelToSnake } from "../utils/case.js";
 import { pathExistsSync, readTextFileSync, sha256Text } from "../utils/fs.js";
 import type {
   EdgeRule,
+  FtsTokenizerMode,
   LoadedWikiConfig,
   SqliteColumnType,
   TemplateConfig,
@@ -28,6 +29,18 @@ function ensureStringArray(value: unknown, label: string): string[] {
   }
 
   return value;
+}
+
+function ensureFtsTokenizerMode(value: unknown, label: string): FtsTokenizerMode {
+  if (value === undefined) {
+    return "default";
+  }
+
+  if (value === "default" || value === "simple") {
+    return value;
+  }
+
+  throw new AppError(`${label} must be "default" or "simple"`, "config");
 }
 
 function ensureVaultFileTypes(value: unknown, label: string): string[] {
@@ -114,6 +127,12 @@ export function loadConfig(configPath: string): LoadedWikiConfig {
 
   const baseConfig: WikiConfig = {
     schemaVersion: Number(raw.schemaVersion),
+    fts: {
+      tokenizer: ensureFtsTokenizerMode(
+        ensureObject(raw.fts ?? {}, "fts").tokenizer,
+        "fts.tokenizer",
+      ),
+    },
     customColumns: ensureColumnMap(raw.customColumns ?? {}, "customColumns"),
     defaultSummaryFields: ensureStringArray(raw.defaultSummaryFields ?? [], "defaultSummaryFields"),
     vaultFileTypes: ensureVaultFileTypes(raw.vaultFileTypes ?? DEFAULT_VAULT_FILE_TYPES, "vaultFileTypes"),

@@ -206,6 +206,7 @@ export function applyChanges(
   changes: ScanResult,
   wikiPath: string,
   config: LoadedWikiConfig,
+  ftsExtensionVersion: string | null,
 ): ApplyChangesResult {
   const parseResults = [...changes.added, ...changes.modified].map((entry) => ({
     entry,
@@ -309,7 +310,7 @@ export function applyChanges(
     }
 
     if (hasContentChanges) {
-      rebuildFts(db);
+      rebuildFts(db, config, ftsExtensionVersion);
     }
   });
 

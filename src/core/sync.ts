@@ -124,10 +124,11 @@ export async function syncWorkspace(options: SyncOptions = {}): Promise<SyncResu
   }
   const config = loadConfig(runtimePaths.configPath);
   const embeddingClient = EmbeddingClient.fromEnv(env);
-  const { db, configChanged, vectorDimensionsChanged } = openDb(
+  const { db, configChanged, vectorDimensionsChanged, ftsExtensionVersion } = openDb(
     runtimePaths.dbPath,
     config,
     embeddingClient?.settings.dimensions ?? getEmbeddingDimension(env),
+    runtimePaths.packageRoot,
   );
 
   try {
@@ -150,7 +151,7 @@ export async function syncWorkspace(options: SyncOptions = {}): Promise<SyncResu
     }
 
     if (options.force) {
-      clearAllIndexedData(db);
+      clearAllIndexedData(db, config, ftsExtensionVersion);
       mode = "full";
     }
 
@@ -169,7 +170,7 @@ export async function syncWorkspace(options: SyncOptions = {}): Promise<SyncResu
       throw new AppError(`No page matched the requested --path value(s).`, "not_found");
     }
 
-    const applyResult = applyChanges(db, changes, runtimePaths.wikiPath, config);
+    const applyResult = applyChanges(db, changes, runtimePaths.wikiPath, config, ftsExtensionVersion);
     if (applyResult.parseErrors.length > 0) {
       throw new AppError("Failed to parse one or more wiki pages during sync.", "runtime", {
         parseErrors: applyResult.parseErrors,
@@ -275,7 +276,7 @@ export async function embedPendingPages(env: NodeJS.ProcessEnv = process.env): P
     return;
   }
 
-  const { db } = openDb(runtimePaths.dbPath, config, embeddingClient.settings.dimensions);
+  const { db } = openDb(runtimePaths.dbPath, config, embeddingClient.settings.dimensions, runtimePaths.packageRoot);
   try {
     const targets = getEmbeddingTargets(db, false, [], []);
     const result = await embedPages(db, embeddingClient, targets);
