@@ -402,7 +402,7 @@ export function openDb(
   dbPath: string,
   config: LoadedWikiConfig,
   embeddingDimensions: number,
-  packageRoot: string,
+  packageRoot?: string,
   options: {
     ensureFts?: boolean;
   } = {},

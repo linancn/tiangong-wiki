@@ -7,6 +7,7 @@ import type { LoadedWikiConfig } from "../types/config.js";
 import { AppError } from "../utils/errors.js";
 import { pathExistsSync } from "../utils/fs.js";
 import { isSimpleTokenizerSql } from "./fts.js";
+import { getPackageRoot } from "./paths.js";
 
 export const BUNDLED_SIMPLE_EXTENSION_VERSION = "v0.7.1";
 
@@ -77,7 +78,7 @@ function resolveBundledSimpleExtensionPath(packageRoot: string): string {
 export function loadSqliteExtensions(
   db: Database.Database,
   config: LoadedWikiConfig,
-  packageRoot: string,
+  packageRoot?: string,
 ): SqliteExtensionLoadResult {
   sqliteVec.load(db);
 
@@ -90,7 +91,7 @@ export function loadSqliteExtensions(
     };
   }
 
-  const simpleExtensionPath = resolveBundledSimpleExtensionPath(packageRoot);
+  const simpleExtensionPath = resolveBundledSimpleExtensionPath(packageRoot ?? getPackageRoot());
   try {
     db.loadExtension(simpleExtensionPath);
   } catch (error) {
