@@ -255,6 +255,16 @@ export function applyChanges(
   const hasContentChanges = parsedEntries.length > 0 || changes.deleted.length > 0;
 
   const transaction = db.transaction(() => {
+    for (const page of changes.deleted) {
+      const existing = selectPageRowid.get(page.id) as { rowid: number } | undefined;
+      deleteEdgesBySourcePage.run(page.id);
+      if (existing) {
+        deleteVecRow.run(BigInt(existing.rowid));
+      }
+      deletePage.run(page.id);
+      deleted.push(page.id);
+    }
+
     for (const { entry, parsed } of parsedEntries) {
       const existing = selectExistingPage.get(entry.id) as
         | { rowid: number; summaryText: string | null; embeddingStatus: string | null; createdAt: string | null }
@@ -297,16 +307,6 @@ export function applyChanges(
           metadata: JSON.stringify(edge.metadata),
         });
       }
-    }
-
-    for (const page of changes.deleted) {
-      const existing = selectPageRowid.get(page.id) as { rowid: number } | undefined;
-      deleteEdgesBySourcePage.run(page.id);
-      if (existing) {
-        deleteVecRow.run(BigInt(existing.rowid));
-      }
-      deletePage.run(page.id);
-      deleted.push(page.id);
     }
 
     if (hasContentChanges) {

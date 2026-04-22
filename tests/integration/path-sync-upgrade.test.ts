@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { rmSync } from "node:fs";
+import path from "node:path";
 
 import {
   bootstrapRuntimeAssets,
@@ -99,5 +101,74 @@ Body for ${nodeId}.
       "SELECT id, project_id AS projectId FROM pages ORDER BY id",
     );
     expect(rows.filter((row) => row.projectId === null)).toHaveLength(3);
+  });
+
+  it("syncs a renamed page without tripping the node_id unique constraint when nodeId is unchanged", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    bootstrapRuntimeAssets(workspace);
+
+    writePage(
+      workspace,
+      "concepts/original.md",
+      `---
+pageType: concept
+title: Renamed Concept
+nodeId: renamed-concept
+status: active
+visibility: shared
+sourceRefs: []
+relatedPages: []
+tags:
+  - rename
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+confidence: high
+masteryLevel: medium
+prerequisites: []
+---
+
+Original body.
+`,
+    );
+
+    runCliJson<{ inserted: number }>(["sync"], workspace.env);
+
+    writePage(
+      workspace,
+      "archive/renamed.md",
+      `---
+pageType: concept
+title: Renamed Concept
+nodeId: renamed-concept
+status: active
+visibility: shared
+sourceRefs: []
+relatedPages: []
+tags:
+  - rename
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+confidence: high
+masteryLevel: medium
+prerequisites: []
+---
+
+Original body.
+`,
+    );
+    rmSync(path.join(workspace.wikiPath, "concepts", "original.md"), { force: true });
+
+    const sync = runCliJson<{ inserted: number; deleted: number; updated: number }>(["sync"], workspace.env);
+
+    expect(sync.inserted).toBe(1);
+    expect(sync.updated).toBe(0);
+    expect(sync.deleted).toBe(1);
+
+    const rows = queryDb<{ id: string; nodeId: string | null }>(
+      workspace,
+      "SELECT id, node_id AS nodeId FROM pages ORDER BY id",
+    );
+    expect(rows).toEqual([{ id: "archive/renamed.md", nodeId: "renamed-concept" }]);
   });
 });
