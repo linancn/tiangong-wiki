@@ -1,6 +1,6 @@
 {
   "name": "@biaoo/tiangong-wiki",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Local-first wiki index and query engine for Markdown knowledge pages (Tiangong Wiki).",
   "type": "module",
   "publishConfig": {
