@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 
 import {
@@ -48,6 +50,8 @@ const INLINE_WORKFLOW_ATTEMPTS = 2;
 const MAX_QUEUE_ERROR_RETRIES = 3;
 const QUEUE_FULL_RETRY_DELAY_SECONDS = 300;
 const WORKFLOW_TIMEOUT_RETRY_DELAY_SECONDS = 120;
+const PROCESSING_HEARTBEAT_INTERVAL_MS = 15_000;
+const PROCESSING_STALE_THRESHOLD_SECONDS = 600;
 const NON_RETRYABLE_QUEUE_ERROR_CODES = new Set(["config_error", "invalid_request"]);
 
 function buildFileIdFilterClause(filterFileIds: string[] | undefined): { clause: string; params: string[] } {
@@ -106,6 +110,8 @@ function mapQueueRow(row: Record<string, unknown>): VaultQueueItem {
     queuedAt: String(row.queuedAt),
     claimedAt: typeof row.claimedAt === "string" ? row.claimedAt : null,
     startedAt: typeof row.startedAt === "string" ? row.startedAt : null,
+    heartbeatAt: typeof row.heartbeatAt === "string" ? row.heartbeatAt : null,
+    processingOwnerId: typeof row.processingOwnerId === "string" ? row.processingOwnerId : null,
     processedAt: typeof row.processedAt === "string" ? row.processedAt : null,
     resultPageId: typeof row.resultPageId === "string" ? row.resultPageId : null,
     errorMessage: typeof row.errorMessage === "string" ? row.errorMessage : null,
@@ -137,7 +143,8 @@ function claimQueueItems(
   options: {
     filterFileIds?: string[];
     excludeFileIds?: Iterable<string>;
-  } = {},
+    processingOwnerId: string;
+  },
 ): VaultQueueItem[] {
   const filter = buildFileIdFilterClause(options.filterFileIds);
   const exclude = buildExcludedFileIdClause(options.excludeFileIds);
@@ -161,6 +168,8 @@ function claimQueueItems(
         queued_at AS queuedAt,
         claimed_at AS claimedAt,
         started_at AS startedAt,
+        heartbeat_at AS heartbeatAt,
+        processing_owner_id AS processingOwnerId,
         processed_at AS processedAt,
         result_page_id AS resultPageId,
         error_message AS errorMessage,
@@ -201,8 +210,20 @@ function claimQueueItems(
         status = 'processing',
         claimed_at = @claimed_at,
         started_at = @started_at,
+        heartbeat_at = @heartbeat_at,
+        processing_owner_id = @processing_owner_id,
+        processed_at = NULL,
+        result_page_id = NULL,
         error_message = NULL,
-        retry_after = NULL
+        decision = NULL,
+        last_error_at = NULL,
+        last_error_code = NULL,
+        retry_after = NULL,
+        created_page_ids = NULL,
+        updated_page_ids = NULL,
+        applied_type_names = NULL,
+        proposed_type_names = NULL,
+        skills_used = NULL
       WHERE file_id = @file_id AND status IN ('pending', 'error')
     `,
   );
@@ -219,6 +240,8 @@ function claimQueueItems(
           file_id: item.fileId,
           claimed_at: startedAt,
           started_at: startedAt,
+          heartbeat_at: startedAt,
+          processing_owner_id: options.processingOwnerId,
         },
       );
     }
@@ -226,6 +249,8 @@ function claimQueueItems(
       ...item,
       claimedAt: startedAt,
       startedAt,
+      heartbeatAt: startedAt,
+      processingOwnerId: options.processingOwnerId,
     }));
   })(limit, [...filter.params, ...exclude.params]);
 }
@@ -243,6 +268,8 @@ function fetchQueueItemsByStatus(
         queued_at AS queuedAt,
         claimed_at AS claimedAt,
         started_at AS startedAt,
+        heartbeat_at AS heartbeatAt,
+        processing_owner_id AS processingOwnerId,
         processed_at AS processedAt,
         result_page_id AS resultPageId,
         error_message AS errorMessage,
@@ -286,6 +313,8 @@ function fetchQueueItemByFileId(
         queued_at AS queuedAt,
         claimed_at AS claimedAt,
         started_at AS startedAt,
+        heartbeat_at AS heartbeatAt,
+        processing_owner_id AS processingOwnerId,
         processed_at AS processedAt,
         result_page_id AS resultPageId,
         error_message AS errorMessage,
@@ -336,6 +365,147 @@ function fetchVaultFile(db: Database.Database, fileId: string): VaultFile | null
   return row ?? null;
 }
 
+function buildProcessingOwnerId(): string {
+  return `${os.hostname()}:${process.pid}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+}
+
+function updateQueueProcessingHeartbeat(
+  db: Database.Database,
+  fileId: string,
+  processingOwnerId: string,
+  heartbeatAt = toOffsetIso(),
+): boolean {
+  const result = db.prepare(
+    `
+      UPDATE vault_processing_queue
+      SET heartbeat_at = @heartbeat_at
+      WHERE file_id = @file_id
+        AND status = 'processing'
+        AND processing_owner_id = @processing_owner_id
+    `,
+  ).run({
+    file_id: fileId,
+    heartbeat_at: heartbeatAt,
+    processing_owner_id: processingOwnerId,
+  });
+  return result.changes > 0;
+}
+
+function startProcessingHeartbeat(input: {
+  db: Database.Database;
+  fileId: string;
+  processingOwnerId: string | null | undefined;
+}): { refresh: () => void; stop: () => void } {
+  const processingOwnerId = input.processingOwnerId?.trim() ?? "";
+  if (!processingOwnerId) {
+    return {
+      refresh: () => {},
+      stop: () => {},
+    };
+  }
+
+  const refresh = () => {
+    updateQueueProcessingHeartbeat(input.db, input.fileId, processingOwnerId);
+  };
+  const timer = setInterval(refresh, PROCESSING_HEARTBEAT_INTERVAL_MS);
+  timer.unref?.();
+
+  return {
+    refresh,
+    stop: () => clearInterval(timer),
+  };
+}
+
+function fetchStaleProcessingQueueItems(
+  db: Database.Database,
+  processingOwnerId: string,
+): VaultQueueItem[] {
+  const cutoff = toOffsetIso(addSeconds(new Date(), -PROCESSING_STALE_THRESHOLD_SECONDS));
+  const rows = db.prepare(
+    `
+      SELECT
+        file_id AS fileId,
+        status,
+        priority,
+        queued_at AS queuedAt,
+        claimed_at AS claimedAt,
+        started_at AS startedAt,
+        heartbeat_at AS heartbeatAt,
+        processing_owner_id AS processingOwnerId,
+        processed_at AS processedAt,
+        result_page_id AS resultPageId,
+        error_message AS errorMessage,
+        attempts,
+        thread_id AS threadId,
+        workflow_version AS workflowVersion,
+        decision,
+        result_manifest_path AS resultManifestPath,
+        last_error_at AS lastErrorAt,
+        last_error_code AS lastErrorCode,
+        retry_after AS retryAfter,
+        created_page_ids AS createdPageIds,
+        updated_page_ids AS updatedPageIds,
+        applied_type_names AS appliedTypeNames,
+        proposed_type_names AS proposedTypeNames,
+        skills_used AS skillsUsed,
+        vault_files.file_name AS fileName,
+        vault_files.file_ext AS fileExt,
+        vault_files.source_type AS sourceType,
+        vault_files.file_size AS fileSize,
+        vault_files.file_path AS filePath
+      FROM vault_processing_queue
+      LEFT JOIN vault_files ON vault_files.id = vault_processing_queue.file_id
+      WHERE status = 'processing'
+        AND COALESCE(processing_owner_id, '') != ?
+        AND (
+          (heartbeat_at IS NOT NULL AND julianday(heartbeat_at) <= julianday(?))
+          OR (
+            heartbeat_at IS NULL
+            AND claimed_at IS NOT NULL
+            AND julianday(claimed_at) <= julianday(?)
+          )
+        )
+      ORDER BY COALESCE(heartbeat_at, claimed_at) ASC, priority DESC, queued_at ASC
+    `,
+  ).all(processingOwnerId, cutoff, cutoff) as Array<Record<string, unknown>>;
+
+  return rows.map(mapQueueRow);
+}
+
+function requeueRecoveredProcessingItem(db: Database.Database, fileId: string): void {
+  db.prepare(
+    `
+      UPDATE vault_processing_queue
+      SET
+        status = 'pending',
+        queued_at = @queued_at,
+        claimed_at = NULL,
+        started_at = NULL,
+        heartbeat_at = NULL,
+        processing_owner_id = NULL,
+        processed_at = NULL,
+        result_page_id = NULL,
+        error_message = NULL,
+        thread_id = NULL,
+        workflow_version = NULL,
+        decision = NULL,
+        result_manifest_path = NULL,
+        last_error_at = NULL,
+        last_error_code = NULL,
+        retry_after = NULL,
+        created_page_ids = NULL,
+        updated_page_ids = NULL,
+        applied_type_names = NULL,
+        proposed_type_names = NULL,
+        skills_used = NULL
+      WHERE file_id = @file_id
+    `,
+  ).run({
+    file_id: fileId,
+    queued_at: toOffsetIso(),
+  });
+}
+
 function updateQueueStatus(
   db: Database.Database,
   fileId: string,
@@ -353,6 +523,8 @@ function updateQueueStatus(
       SET
         status = @status,
         processed_at = @processed_at,
+        heartbeat_at = NULL,
+        processing_owner_id = NULL,
         result_page_id = COALESCE(@result_page_id, result_page_id),
         error_message = @error_message,
         attempts = CASE WHEN @increment_attempts = 1 THEN attempts + 1 ELSE attempts END
@@ -374,6 +546,7 @@ function updateQueueWorkflowTracking(
   payload: {
     threadId: string;
     resultManifestPath: string;
+    processingOwnerId?: string | null;
   },
 ): void {
   db.prepare(
@@ -382,7 +555,8 @@ function updateQueueWorkflowTracking(
       SET
         thread_id = @thread_id,
         workflow_version = @workflow_version,
-        result_manifest_path = @result_manifest_path
+        result_manifest_path = @result_manifest_path,
+        heartbeat_at = COALESCE(@heartbeat_at, heartbeat_at)
       WHERE file_id = @file_id
     `,
   ).run({
@@ -390,6 +564,10 @@ function updateQueueWorkflowTracking(
     thread_id: payload.threadId,
     workflow_version: CODEX_WORKFLOW_VERSION,
     result_manifest_path: payload.resultManifestPath,
+    heartbeat_at:
+      payload.processingOwnerId && payload.processingOwnerId.trim()
+        ? toOffsetIso()
+        : null,
   });
 }
 
@@ -505,6 +683,8 @@ function applyWorkflowManifest(
         SET
           status = 'error',
           processed_at = @processed_at,
+          heartbeat_at = NULL,
+          processing_owner_id = NULL,
           result_page_id = @result_page_id,
           error_message = @error_message,
           attempts = attempts + 1,
@@ -548,6 +728,8 @@ function applyWorkflowManifest(
       SET
         status = @status,
         processed_at = @processed_at,
+        heartbeat_at = NULL,
+        processing_owner_id = NULL,
         result_page_id = @result_page_id,
         error_message = NULL,
         workflow_version = @workflow_version,
@@ -670,6 +852,9 @@ async function runWithWorkflowTimeout<T>(
 function readRecoverableWorkflowResult(
   resultPath: string | null | undefined,
   expectedThreadId: string | null,
+  options: {
+    allowError?: boolean;
+  } = {},
 ): WorkflowResultManifest | null {
   if (!resultPath || !expectedThreadId) {
     return null;
@@ -677,13 +862,67 @@ function readRecoverableWorkflowResult(
 
   try {
     const manifest = readWorkflowResult(resultPath);
-    if (manifest.threadId !== expectedThreadId || manifest.status === "error") {
+    if (manifest.threadId !== expectedThreadId) {
+      return null;
+    }
+    if (manifest.status === "error" && options.allowError !== true) {
       return null;
     }
     return manifest;
   } catch {
     return null;
   }
+}
+
+function recoverStaleProcessingQueueItems(input: {
+  db: Database.Database;
+  processingOwnerId: string;
+  log?: (message: string) => void;
+  templateEvolution: ReturnType<typeof resolveTemplateEvolutionSettings>;
+}): QueueProcessItemResult[] {
+  const staleItems = fetchStaleProcessingQueueItems(input.db, input.processingOwnerId);
+  const recovered: QueueProcessItemResult[] = [];
+
+  for (const item of staleItems) {
+    const recoveredManifest = readRecoverableWorkflowResult(item.resultManifestPath, item.threadId ?? null, {
+      allowError: true,
+    });
+
+    if (recoveredManifest && item.resultManifestPath) {
+      assertTemplateEvolutionAllowed(recoveredManifest, input.templateEvolution);
+      const outcome = applyWorkflowManifest(
+        input.db,
+        item.fileId,
+        recoveredManifest,
+        item.resultManifestPath,
+        item.attempts,
+      );
+      input.log?.(
+        `${item.fileId}: recovered stale processing with persisted result status=${outcome.status} thread=${recoveredManifest.threadId} ${formatManifestLogFields(recoveredManifest)} result=${item.resultManifestPath}`,
+      );
+      recovered.push({
+        fileId: item.fileId,
+        status: outcome.status,
+        pageId: outcome.pageId,
+        reason: recoveredManifest.reason,
+        threadId: recoveredManifest.threadId,
+        decision: recoveredManifest.decision,
+        skillsUsed: recoveredManifest.skillsUsed,
+        createdPageIds: recoveredManifest.createdPageIds,
+        updatedPageIds: recoveredManifest.updatedPageIds,
+        proposedTypeNames: recoveredManifest.proposedTypes.map((entry) => entry.name),
+        resultManifestPath: item.resultManifestPath,
+      });
+      continue;
+    }
+
+    requeueRecoveredProcessingItem(input.db, item.fileId);
+    input.log?.(
+      `${item.fileId}: requeued stale processing claim=${item.claimedAt ?? "-"} heartbeat=${item.heartbeatAt ?? "-"} owner=${item.processingOwnerId ?? "-"} result=${item.resultManifestPath ?? "-"}`,
+    );
+  }
+
+  return recovered;
 }
 
 function shouldAttemptManifestRecovery(error: unknown): boolean {
@@ -740,6 +979,8 @@ function updateQueueWorkflowError(
       SET
         status = 'error',
         processed_at = @processed_at,
+        heartbeat_at = NULL,
+        processing_owner_id = NULL,
         error_message = @error_message,
         attempts = attempts + 1,
         started_at = COALESCE(started_at, @processed_at),
@@ -831,6 +1072,7 @@ async function processClaimedQueueItem(input: {
   env: NodeJS.ProcessEnv;
   paths: ReturnType<typeof resolveRuntimePaths>;
   item: VaultQueueItem;
+  processingOwnerId: string;
   log?: (message: string) => void;
   workflowRunner: CodexWorkflowRunner;
   templateEvolution: ReturnType<typeof resolveTemplateEvolutionSettings>;
@@ -841,31 +1083,36 @@ async function processClaimedQueueItem(input: {
   input.log?.(
     `${item.fileId}: start processing attempt=${item.attempts + 1} queuedAt=${item.queuedAt} thread=${item.threadId ?? "-"}`
   );
-
-  const file = fetchVaultFile(db, item.fileId);
-  if (!file) {
-    updateQueueStatus(db, item.fileId, {
-      status: "error",
-      processedAt: toOffsetIso(),
-      errorMessage: `Vault file missing from index: ${item.fileId}`,
-      incrementAttempts: true,
-    });
-    input.log?.(`${item.fileId}: error thread=- result=- message=Vault file missing from index`);
-    return {
-      status: "error",
-      item: {
-        fileId: item.fileId,
-        status: "error",
-        reason: "Vault file missing from index",
-      },
-    };
-  }
-
+  const processingHeartbeat = startProcessingHeartbeat({
+    db,
+    fileId: item.fileId,
+    processingOwnerId: item.processingOwnerId ?? input.processingOwnerId,
+  });
   let threadId = item.threadId ?? null;
   let resultManifestPath: string | null = null;
 
   try {
+    const file = fetchVaultFile(db, item.fileId);
+    if (!file) {
+      updateQueueStatus(db, item.fileId, {
+        status: "error",
+        processedAt: toOffsetIso(),
+        errorMessage: `Vault file missing from index: ${item.fileId}`,
+        incrementAttempts: true,
+      });
+      input.log?.(`${item.fileId}: error thread=- result=- message=Vault file missing from index`);
+      return {
+        status: "error",
+        item: {
+          fileId: item.fileId,
+          status: "error",
+          reason: "Vault file missing from index",
+        },
+      };
+    }
+
     const localFilePath = await ensureLocalVaultFile(file, paths.vaultPath, env);
+    processingHeartbeat.refresh();
     const { artifacts, input: workflowInput } = prepareCodexWorkflowInput(
       paths,
       item,
@@ -902,6 +1149,7 @@ async function processClaimedQueueItem(input: {
             updateQueueWorkflowTracking(db, item.fileId, {
               threadId: startedThreadId,
               resultManifestPath: artifacts.resultPath,
+              processingOwnerId: item.processingOwnerId ?? input.processingOwnerId,
             });
             input.log?.(
               `${item.fileId}: workflow started mode=${mode} attempt=${attempt}/${maxWorkflowAttempts} thread=${startedThreadId} result=${artifacts.resultPath}`,
@@ -929,7 +1177,9 @@ async function processClaimedQueueItem(input: {
         updateQueueWorkflowTracking(db, item.fileId, {
           threadId: handle.threadId,
           resultManifestPath: artifacts.resultPath,
+          processingOwnerId: item.processingOwnerId ?? input.processingOwnerId,
         });
+        processingHeartbeat.refresh();
 
         input.log?.(
           `${item.fileId}: waiting for workflow result thread=${handle.threadId} attempt=${attempt}/${maxWorkflowAttempts} result=${artifacts.resultPath}`,
@@ -955,6 +1205,7 @@ async function processClaimedQueueItem(input: {
           updateQueueWorkflowTracking(db, item.fileId, {
             threadId,
             resultManifestPath: artifacts.resultPath,
+            processingOwnerId: item.processingOwnerId ?? input.processingOwnerId,
           });
         }
 
@@ -1070,6 +1321,8 @@ async function processClaimedQueueItem(input: {
         resultManifestPath,
       },
     };
+  } finally {
+    processingHeartbeat.stop();
   }
 }
 
@@ -1170,6 +1423,7 @@ export async function processVaultQueueBatch(
     const maxWorkflowAttempts = isInlineRetryCapable(workflowRunner) ? INLINE_WORKFLOW_ATTEMPTS : 1;
     const workflowTimeoutMs = agentSettings.workflowTimeoutSeconds * 1000;
     const workerSlots = Math.max(0, options.maxItems ?? agentSettings.batchSize);
+    const processingOwnerId = buildProcessingOwnerId();
     const attemptedFileIds = new Set<string>();
     const orderedItems: Array<{ sequence: number; item: QueueProcessItemResult }> = [];
     let nextSequence = 0;
@@ -1185,6 +1439,16 @@ export async function processVaultQueueBatch(
       result.processed += 1;
     };
 
+    for (const recoveredItem of recoverStaleProcessingQueueItems({
+      db,
+      processingOwnerId,
+      log: options.log,
+      templateEvolution,
+    })) {
+      countOutcome(recoveredItem.status);
+      orderedItems.push({ sequence: nextSequence++, item: recoveredItem });
+    }
+
     const claimNextQueueItem = (): { sequence: number; item: VaultQueueItem } | null => {
       if (options.shouldStop?.() === true) {
         return null;
@@ -1198,6 +1462,7 @@ export async function processVaultQueueBatch(
       const item = claimQueueItems(db, 1, {
         filterFileIds: remainingFilterFileIds,
         excludeFileIds: attemptedFileIds,
+        processingOwnerId,
       })[0];
       if (!item) {
         return null;
@@ -1226,6 +1491,7 @@ export async function processVaultQueueBatch(
           env,
           paths,
           item: claimed.item,
+          processingOwnerId,
           log: options.log,
           workflowRunner,
           templateEvolution,

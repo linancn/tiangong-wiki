@@ -126,6 +126,8 @@ function ensureBaseTables(db: Database.Database, embeddingDimensions: number): v
       queued_at TEXT NOT NULL,
       claimed_at TEXT,
       started_at TEXT,
+      heartbeat_at TEXT,
+      processing_owner_id TEXT,
       processed_at TEXT,
       result_page_id TEXT,
       error_message TEXT,
@@ -163,6 +165,8 @@ function ensureBaseTables(db: Database.Database, embeddingDimensions: number): v
   ensureTableColumns(db, "vault_processing_queue", {
     claimed_at: "TEXT",
     started_at: "TEXT",
+    heartbeat_at: "TEXT",
+    processing_owner_id: "TEXT",
     thread_id: "TEXT",
     workflow_version: "TEXT",
     decision: "TEXT",

@@ -12,6 +12,8 @@ import {
 } from "../helpers.js";
 
 const WORKFLOW_COLUMNS = [
+  "heartbeat_at",
+  "processing_owner_id",
   "thread_id",
   "workflow_version",
   "decision",
@@ -90,6 +92,8 @@ describe("queue schema workflow fields", () => {
           UPDATE vault_processing_queue
           SET
             thread_id = @threadId,
+            heartbeat_at = @heartbeatAt,
+            processing_owner_id = @processingOwnerId,
             workflow_version = @workflowVersion,
             decision = @decision,
             result_manifest_path = @resultManifestPath,
@@ -106,6 +110,8 @@ describe("queue schema workflow fields", () => {
       ).run({
         fileId: "imports/spec.pdf",
         threadId: "thread-123",
+        heartbeatAt: "2026-04-07T12:01:00+08:00",
+        processingOwnerId: "host:pid:123",
         workflowVersion: "2026-04-07",
         decision: "apply",
         resultManifestPath: "/tmp/result.json",
@@ -127,6 +133,8 @@ describe("queue schema workflow fields", () => {
       `
         SELECT
           thread_id AS threadId,
+          heartbeat_at AS heartbeatAt,
+          processing_owner_id AS processingOwnerId,
           workflow_version AS workflowVersion,
           decision,
           result_manifest_path AS resultManifestPath,
@@ -143,6 +151,8 @@ describe("queue schema workflow fields", () => {
     );
     expect(rows[0]).toEqual({
       threadId: "thread-123",
+      heartbeatAt: "2026-04-07T12:01:00+08:00",
+      processingOwnerId: "host:pid:123",
       workflowVersion: "2026-04-07",
       decision: "apply",
       resultManifestPath: "/tmp/result.json",

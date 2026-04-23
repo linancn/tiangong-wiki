@@ -566,6 +566,8 @@ export function syncVaultIndex(
         queued_at,
         claimed_at,
         started_at,
+        heartbeat_at,
+        processing_owner_id,
         processed_at,
         result_page_id,
         error_message,
@@ -587,6 +589,8 @@ export function syncVaultIndex(
         'pending',
         @priority,
         @queued_at,
+        NULL,
+        NULL,
         NULL,
         NULL,
         NULL,
@@ -619,6 +623,14 @@ export function syncVaultIndex(
         END,
         started_at = CASE
           WHEN vault_processing_queue.status = 'processing' THEN vault_processing_queue.started_at
+          ELSE NULL
+        END,
+        heartbeat_at = CASE
+          WHEN vault_processing_queue.status = 'processing' THEN vault_processing_queue.heartbeat_at
+          ELSE NULL
+        END,
+        processing_owner_id = CASE
+          WHEN vault_processing_queue.status = 'processing' THEN vault_processing_queue.processing_owner_id
           ELSE NULL
         END,
         processed_at = CASE

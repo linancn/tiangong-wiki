@@ -63,6 +63,8 @@ export interface VaultQueueItem {
   queuedAt: string;
   claimedAt?: string | null;
   startedAt?: string | null;
+  heartbeatAt?: string | null;
+  processingOwnerId?: string | null;
   processedAt: string | null;
   resultPageId: string | null;
   errorMessage: string | null;
