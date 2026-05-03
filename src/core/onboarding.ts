@@ -5,7 +5,7 @@ import { confirm, input, password, select } from "@inquirer/prompts";
 
 import { DEFAULT_WIKI_ENV_FILE, getCliEnvironmentInfo, parseEnvFile, serializeEnvEntries } from "./cli-env.js";
 import { resolveTemplateFilePath, loadConfig } from "./config.js";
-import { EmbeddingClient } from "./embedding.js";
+import { DEFAULT_EMBEDDING_DIMENSIONS, EmbeddingClient } from "./embedding.js";
 import { writeGlobalConfig } from "./global-config.js";
 import {
   DEFAULT_WIKI_AGENT_MODEL,
@@ -663,7 +663,7 @@ function getPathDefaults(env: NodeJS.ProcessEnv, cwd: string): SetupValues {
     embeddingBaseUrl: env.EMBEDDING_BASE_URL ?? env.OPENROUTER_BASE_URL ?? "https://api.openai.com/v1",
     embeddingApiKey: env.EMBEDDING_API_KEY ?? env.OPENROUTER_API_KEY ?? null,
     embeddingModel: env.EMBEDDING_MODEL ?? env.OPENROUTER_EMBEDDING_MODEL ?? "text-embedding-3-small",
-    embeddingDimensions: env.EMBEDDING_DIMENSIONS ?? "384",
+    embeddingDimensions: env.EMBEDDING_DIMENSIONS ?? String(DEFAULT_EMBEDDING_DIMENSIONS),
     agentEnabled: (env.WIKI_AGENT_ENABLED ?? "").trim().toLowerCase() === "true",
     agentAuthMode,
     agentBaseUrl: env.WIKI_AGENT_BASE_URL ?? (agentAuthMode === "api-key" ? "https://api.openai.com/v1" : null),
@@ -709,7 +709,7 @@ async function collectEmbeddingSettings(
     const embeddingDimensions = await promptText(
       driver,
       "EMBEDDING_DIMENSIONS",
-      defaults.embeddingDimensions ?? "384",
+      defaults.embeddingDimensions ?? String(DEFAULT_EMBEDDING_DIMENSIONS),
       { validator: (value) => validateNonNegativeInteger(value, "EMBEDDING_DIMENSIONS") },
     );
 

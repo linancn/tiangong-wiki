@@ -1,14 +1,14 @@
 import { loadConfig } from "./config.js";
 import { openDb } from "./db.js";
-import { EmbeddingClient } from "./embedding.js";
+import { DEFAULT_EMBEDDING_DIMENSIONS, EmbeddingClient } from "./embedding.js";
 import { resolveRuntimePaths } from "./paths.js";
 import type { LoadedWikiConfig } from "../types/config.js";
 import type { RuntimePaths } from "../types/page.js";
 
 export function getEmbeddingDimensionFromEnv(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env.EMBEDDING_DIMENSIONS ?? "384";
+  const raw = env.EMBEDDING_DIMENSIONS ?? String(DEFAULT_EMBEDDING_DIMENSIONS);
   const value = Number.parseInt(raw, 10);
-  return Number.isFinite(value) && value > 0 ? value : 384;
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_EMBEDDING_DIMENSIONS;
 }
 
 export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): {

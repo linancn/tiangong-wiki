@@ -75,7 +75,7 @@ For the full single-host deployment baseline, see [centralized-service-deploymen
 | `EMBEDDING_BASE_URL` | Yes | Embedding API base URL |
 | `EMBEDDING_API_KEY` | Yes | Embedding API key |
 | `EMBEDDING_MODEL` | Yes | Embedding model name |
-| `EMBEDDING_DIMENSIONS` | No | Vector dimensions (default: model-dependent) |
+| `EMBEDDING_DIMENSIONS` | No | Vector dimensions (default: `1536`, matching the default OpenAI `text-embedding-3-small`; set explicitly only when using a different dimension profile) |
 
 ### Agent (Agentic Workflow)
 
@@ -85,7 +85,7 @@ The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to p
 | --- | --- | --- |
 | `WIKI_AGENT_ENABLED` | No | Enable agentic workflow (`true` / `false`, default: `false`) |
 | `WIKI_AGENT_AUTH_MODE` | No | Auth mode: `api-key` or `codex-login`. Runtime default is `api-key` for backwards compatibility; `tiangong-wiki setup` defaults new agent configs to `codex-login` |
-| `WIKI_AGENT_CODEX_HOME` | In `codex-login` mode | Dedicated Codex home directory (setup default: `${HOME}/.codex-tiangong-wiki`) |
+| `WIKI_AGENT_CODEX_HOME` | No | Dedicated Codex home directory. Leave unset to use the current user's default `${HOME}/.codex-tiangong-wiki`; if set in `.wiki.env`, use a real absolute path because shell variables are not expanded there |
 | `WIKI_AGENT_BASE_URL` | No | LLM API base URL for `api-key` mode (e.g. `https://api.openai.com/v1`). When set, overrides global Codex config |
 | `WIKI_AGENT_API_KEY` | In `api-key` mode | API key for the LLM provider |
 | `WIKI_AGENT_MODEL` | No | Model name (default: `gpt-5.5`; e.g. `Qwen/Qwen3.5-397B-A17B-GPTQ-Int4`) |
@@ -161,7 +161,8 @@ Then configure the wiki agent:
 ```env
 WIKI_AGENT_ENABLED=true
 WIKI_AGENT_AUTH_MODE=codex-login
-WIKI_AGENT_CODEX_HOME=/Users/davidli/.codex-tiangong-wiki
+# Optional. Leave unset to use the current user's default dedicated Codex home.
+# WIKI_AGENT_CODEX_HOME=/absolute/path/to/.codex-tiangong-wiki
 WIKI_AGENT_MODEL=gpt-5.5
 ```
 

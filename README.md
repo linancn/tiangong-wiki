@@ -86,7 +86,7 @@ tiangong-wiki sync                                    # index Markdown pages
 
 That means commands still work best from inside a workspace, but they can also run from outside the workspace after setup, or target a specific workspace explicitly with `--env-file`.
 
-For automatic vault processing, new setup runs default to `WIKI_AGENT_AUTH_MODE=codex-login`, `WIKI_AGENT_CODEX_HOME=$HOME/.codex-tiangong-wiki`, and `WIKI_AGENT_MODEL=gpt-5.5`. Run `CODEX_HOME="$HOME/.codex-tiangong-wiki" codex login` before enabling that mode.
+For automatic vault processing, new setup runs default to `WIKI_AGENT_AUTH_MODE=codex-login`, a dedicated Codex home under the current user's home directory, and `WIKI_AGENT_MODEL=gpt-5.5`. Run `CODEX_HOME="$HOME/.codex-tiangong-wiki" codex login` before enabling that mode.
 
 ```bash
 tiangong-wiki find --type concept --status active     # structured query

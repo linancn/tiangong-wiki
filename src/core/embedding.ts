@@ -8,6 +8,8 @@ export interface EmbeddingSettings {
   dimensions: number;
 }
 
+export const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
+
 interface EmbeddingApiResponse {
   data: Array<{
     embedding: number[];
@@ -26,7 +28,7 @@ export class EmbeddingClient {
     const baseUrl = env.EMBEDDING_BASE_URL ?? env.OPENROUTER_BASE_URL;
     const apiKey = env.EMBEDDING_API_KEY ?? env.OPENROUTER_API_KEY;
     const model = env.EMBEDDING_MODEL ?? env.OPENROUTER_EMBEDDING_MODEL;
-    const rawDimensions = env.EMBEDDING_DIMENSIONS ?? "384";
+    const rawDimensions = env.EMBEDDING_DIMENSIONS ?? String(DEFAULT_EMBEDDING_DIMENSIONS);
 
     if (!baseUrl || !apiKey || !model) {
       return null;

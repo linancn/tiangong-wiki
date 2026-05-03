@@ -8,7 +8,7 @@ import {
   resetVectorTable,
   setMetaValues,
 } from "./db.js";
-import { EmbeddingClient } from "./embedding.js";
+import { DEFAULT_EMBEDDING_DIMENSIONS, EmbeddingClient } from "./embedding.js";
 import { applyChanges, scanPages, scanSpecificPages } from "./indexer.js";
 import { resolveRuntimePaths } from "./paths.js";
 import { collectVaultFiles, syncVaultIndex } from "./vault.js";
@@ -25,9 +25,9 @@ export interface SyncOptions {
 }
 
 function getEmbeddingDimension(env: NodeJS.ProcessEnv): number {
-  const raw = env.EMBEDDING_DIMENSIONS ?? "384";
+  const raw = env.EMBEDDING_DIMENSIONS ?? String(DEFAULT_EMBEDDING_DIMENSIONS);
   const value = Number.parseInt(raw, 10);
-  return Number.isFinite(value) && value > 0 ? value : 384;
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_EMBEDDING_DIMENSIONS;
 }
 
 function getEmbeddingTargets(
