@@ -86,6 +86,7 @@ export function buildVaultWorkflowPrompt(input: VaultWorkflowPromptInput): strin
     "",
     "Workspace-local skills are available from WORKSPACE_ROOT through normal Codex skill discovery.",
     "A local tiangong-wiki CLI launcher is already available on PATH for this run.",
+    "On Windows native shells, use `tiangong-wiki.cmd` instead of the suffixless `tiangong-wiki` command.",
     "",
     "The tiangong-wiki CLI provides these discovery and search capabilities:",
     "- `tiangong-wiki type list` / `tiangong-wiki type show <type>` — discover registered page types and their purpose",
@@ -229,6 +230,7 @@ export function ensureWorkflowArtifactSet(
   ensureDirSync(artifacts.skillArtifactsPath);
 
   const wikiCliWrapperPath = path.join(artifacts.skillArtifactsPath, "tiangong-wiki");
+  const wikiCliCmdWrapperPath = path.join(artifacts.skillArtifactsPath, "tiangong-wiki.cmd");
   const nodeExecutable = resolveNodeExecutable();
   const cliEntrypoint = path.join(paths.packageRoot, "dist", "index.js");
   writeTextFileSync(artifacts.queueItemPath, `${JSON.stringify(input.queueItem, null, 2)}\n`);
@@ -253,6 +255,25 @@ export function ensureWorkflowArtifactSet(
     ].join("\n"),
   );
   chmodSync(wikiCliWrapperPath, 0o755);
+  writeTextFileSync(
+    wikiCliCmdWrapperPath,
+    [
+      "@echo off",
+      "setlocal",
+      "if not defined WIKI_CLI_NODE set \"WIKI_CLI_NODE=%~dp0node.exe\"",
+      `if not exist "%WIKI_CLI_NODE%" set "WIKI_CLI_NODE=${nodeExecutable.replace(/"/g, '""')}"`,
+      "if not defined WIKI_CLI_ENTRYPOINT (",
+      `  set "WIKI_CLI_ENTRYPOINT=${cliEntrypoint.replace(/"/g, '""')}"`,
+      ")",
+      "if not exist \"%WIKI_CLI_ENTRYPOINT%\" (",
+      "  echo tiangong-wiki CLI entrypoint not found: %WIKI_CLI_ENTRYPOINT% 1>&2",
+      "  exit /b 127",
+      ")",
+      "\"%WIKI_CLI_NODE%\" \"%WIKI_CLI_ENTRYPOINT%\" %*",
+      "exit /b %ERRORLEVEL%",
+      "",
+    ].join("\r\n"),
+  );
   writeTextFileSync(
     artifacts.promptPath,
     input.promptMarkdown ??

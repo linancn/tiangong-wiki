@@ -79,14 +79,16 @@ For the full single-host deployment baseline, see [centralized-service-deploymen
 
 ### Agent (Agentic Workflow)
 
-The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to process vault items. When `WIKI_AGENT_BASE_URL` is set, a custom `model_provider` is injected to override any global `~/.codex/config.toml` settings.
+The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to process vault items. It supports API-key auth and local Codex login auth. In `api-key` mode, when `WIKI_AGENT_BASE_URL` is set, a custom `model_provider` is injected to override any global `~/.codex/config.toml` settings. In `codex-login` mode, the workflow uses `WIKI_AGENT_CODEX_HOME` as `CODEX_HOME` and does not pass API key environment variables to Codex.
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `WIKI_AGENT_ENABLED` | No | Enable agentic workflow (`true` / `false`, default: `false`) |
-| `WIKI_AGENT_BASE_URL` | No | LLM API base URL (e.g. `https://api.openai.com/v1`). When set, overrides global Codex config |
-| `WIKI_AGENT_API_KEY` | If enabled | API key for the LLM provider |
-| `WIKI_AGENT_MODEL` | No | Model name (e.g. `gpt-5.4`, `Qwen/Qwen3.5-397B-A17B-GPTQ-Int4`) |
+| `WIKI_AGENT_AUTH_MODE` | No | Auth mode: `api-key` or `codex-login`. Runtime default is `api-key` for backwards compatibility; `tiangong-wiki setup` defaults new agent configs to `codex-login` |
+| `WIKI_AGENT_CODEX_HOME` | In `codex-login` mode | Dedicated Codex home directory (setup default: `${HOME}/.codex-tiangong-wiki`) |
+| `WIKI_AGENT_BASE_URL` | No | LLM API base URL for `api-key` mode (e.g. `https://api.openai.com/v1`). When set, overrides global Codex config |
+| `WIKI_AGENT_API_KEY` | In `api-key` mode | API key for the LLM provider |
+| `WIKI_AGENT_MODEL` | No | Model name (default: `gpt-5.5`; e.g. `Qwen/Qwen3.5-397B-A17B-GPTQ-Int4`) |
 | `WIKI_AGENT_BATCH_SIZE` | No | Max concurrent vault queue workers per cycle (default: `5`) |
 | `WIKI_AGENT_SANDBOX_MODE` | No | Codex sandbox mode: `danger-full-access` (default) or `workspace-write` |
 | `WIKI_PARSER_SKILLS` | No | Comma-separated parser skill list (e.g. `pdf,docx,pptx,xlsx`) |
@@ -134,6 +136,8 @@ tiangong-wiki.cmd lint --format json
 
 Avoid bare `tiangong-wiki` in PowerShell, Command Prompt, daemon scripts, and Codex worker automation. npm installs a suffixless shebang script for POSIX-like environments, but Windows native shells do not execute it the same way as macOS, Linux, WSL, or Git Bash.
 
+Vault workflow artifacts also include a workspace-local `tiangong-wiki.cmd` launcher. If a Windows agent opens a new command window or an app chooser while processing vault items, verify that it is calling `tiangong-wiki.cmd`, not the suffixless `tiangong-wiki` wrapper.
+
 ### Codex workflow sandbox fails to initialize
 
 If the agent workflow fails with `bwrap`, `unshare`, `uid_map`, or similar sandbox startup errors, switch `WIKI_AGENT_SANDBOX_MODE` to `danger-full-access`. Use `workspace-write` only when you explicitly want that sandbox mode and know the host supports it.
@@ -142,12 +146,32 @@ If the agent workflow fails with `bwrap`, `unshare`, `uid_map`, or similar sandb
 
 ## LLM Provider Setup
 
-### OpenAI (default)
+### Codex login (recommended local setup)
+
+Create and log in to a dedicated Codex home for the wiki service:
+
+```bash
+mkdir -p "$HOME/.codex-tiangong-wiki"
+CODEX_HOME="$HOME/.codex-tiangong-wiki" codex login
+CODEX_HOME="$HOME/.codex-tiangong-wiki" codex login status
+```
+
+Then configure the wiki agent:
 
 ```env
 WIKI_AGENT_ENABLED=true
+WIKI_AGENT_AUTH_MODE=codex-login
+WIKI_AGENT_CODEX_HOME=/Users/davidli/.codex-tiangong-wiki
+WIKI_AGENT_MODEL=gpt-5.5
+```
+
+### OpenAI API key
+
+```env
+WIKI_AGENT_ENABLED=true
+WIKI_AGENT_AUTH_MODE=api-key
 WIKI_AGENT_API_KEY=sk-...
-WIKI_AGENT_MODEL=gpt-5.4
+WIKI_AGENT_MODEL=gpt-5.5
 ```
 
 ### vLLM (self-hosted)
@@ -156,6 +180,7 @@ Requires vLLM **v0.8.5+** for Responses API support (`/v1/responses`).
 
 ```env
 WIKI_AGENT_ENABLED=true
+WIKI_AGENT_AUTH_MODE=api-key
 WIKI_AGENT_BASE_URL=http://<host>:<port>/v1
 WIKI_AGENT_API_KEY=<your-token>
 WIKI_AGENT_MODEL=Qwen/Qwen3.5-397B-A17B-GPTQ-Int4

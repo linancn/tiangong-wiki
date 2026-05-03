@@ -105,6 +105,7 @@ export function runCli(
     env,
     encoding: "utf8",
     input: options.input,
+    windowsHide: true,
   });
 
   if (!options.allowFailure && result.status !== 0) {
@@ -131,6 +132,7 @@ export function runGit(
 ): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync("git", ["-C", workspace.wikiRoot, ...args], {
     encoding: "utf8",
+    windowsHide: true,
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: "test-user",
@@ -348,6 +350,7 @@ export async function startEmbeddingServer(
       TEST_EMBED_DIMENSIONS: String(resolved.dimensions ?? 4),
     },
     stdio: ["ignore", "pipe", "inherit"],
+    windowsHide: true,
   });
 
   const port = await new Promise<number>((resolve, reject) => {
@@ -629,6 +632,7 @@ export async function startSynologyServer(
       TEST_SYNOLOGY_STATE: statePath,
     },
     stdio: ["ignore", "pipe", "inherit"],
+    windowsHide: true,
   });
 
   const port = await new Promise<number>((resolve, reject) => {

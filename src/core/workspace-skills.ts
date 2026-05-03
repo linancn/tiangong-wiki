@@ -123,8 +123,8 @@ function canRead(filePath: string): boolean {
   return true;
 }
 
-function getNpxCommand(): string {
-  return process.platform === "win32" ? "npx.cmd" : "npx";
+export function getNpxCommand(platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? "npx.cmd" : "npx";
 }
 
 export function resolveWorkspaceRootFromWikiPath(wikiPath: string): string {
@@ -321,6 +321,10 @@ function replaceSkillDirectory(targetPath: string, sourcePath: string): void {
   copyDirectoryContentsSync(sourcePath, targetPath);
 }
 
+function linkWorkspaceSkill(sourcePath: string, targetPath: string): void {
+  symlinkSync(sourcePath, targetPath, process.platform === "win32" ? "junction" : "dir");
+}
+
 function createManagedSkillMetadata(
   descriptor: ManagedSkillDescriptor,
   baselineHash: string,
@@ -451,6 +455,7 @@ function installManagedExternalSkill(
     cwd: workspaceRoot,
     env: options.env ?? process.env,
     encoding: "utf8",
+    windowsHide: true,
   });
 
   if (result.error) {
@@ -899,7 +904,7 @@ export function ensureWikiSkillInstall(
       }
 
       unlinkSync(paths.wikiSkillPath);
-      symlinkSync(packageRoot, paths.wikiSkillPath, "dir");
+      linkWorkspaceSkill(packageRoot, paths.wikiSkillPath);
       return {
         sourcePath: packageRoot,
         skillPath: paths.wikiSkillPath,
@@ -909,7 +914,7 @@ export function ensureWikiSkillInstall(
 
     if (existing.readable) {
       rmSync(paths.wikiSkillPath, { recursive: true, force: true });
-      symlinkSync(packageRoot, paths.wikiSkillPath, "dir");
+      linkWorkspaceSkill(packageRoot, paths.wikiSkillPath);
       return {
         sourcePath: packageRoot,
         skillPath: paths.wikiSkillPath,
@@ -927,7 +932,7 @@ export function ensureWikiSkillInstall(
     );
   }
 
-  symlinkSync(packageRoot, paths.wikiSkillPath, "dir");
+  linkWorkspaceSkill(packageRoot, paths.wikiSkillPath);
   return {
     sourcePath: packageRoot,
     skillPath: paths.wikiSkillPath,

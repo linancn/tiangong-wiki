@@ -148,6 +148,60 @@ describe("CodexSdkWorkflowRunner", () => {
     expect(resumedRun).toHaveBeenCalledWith("Process the queue item.", undefined);
   });
 
+  it("uses an isolated CODEX_HOME and no API key when configured for Codex login auth", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "wiki-codex-sdk-login-"));
+    tempDirs.push(root);
+    const promptPath = path.join(root, "prompt.md");
+    const queueItemPath = path.join(root, "queue-item.json");
+    const resultPath = path.join(root, "result.json");
+    const codexHome = path.join(root, ".codex-tiangong-wiki");
+
+    writeFileSync(promptPath, "Process the queue item.\n", "utf8");
+    writeFileSync(queueItemPath, `${JSON.stringify({ fileId: "imports/spec.pdf", threadId: null }, null, 2)}\n`, "utf8");
+    writeFileSync(resultPath, "", "utf8");
+
+    startThread.mockReturnValue({
+      id: null,
+      runStreamed: vi.fn().mockResolvedValue({
+        events: eventStream([
+          { type: "thread.started", thread_id: "thread-login" },
+          { type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } },
+        ]),
+      }),
+    });
+
+    const { CodexSdkWorkflowRunner } = await import("../../src/core/codex-workflow.js");
+    const runner = new CodexSdkWorkflowRunner();
+    await runner.startWorkflow({
+      queueItemId: "imports/spec.pdf",
+      workspaceRoot: root,
+      packageRoot: path.resolve(root, ".."),
+      promptPath,
+      promptText: "Process the queue item.",
+      queueItemPath,
+      resultPath,
+      skillArtifactsPath: path.join(root, "skill-artifacts"),
+      model: "gpt-5.5",
+      env: {
+        WIKI_AGENT_AUTH_MODE: "codex-login",
+        WIKI_AGENT_CODEX_HOME: codexHome,
+        OPENAI_API_KEY: "ambient-openai-key",
+        CODEX_API_KEY: "ambient-codex-key",
+      },
+    });
+
+    const clientOptions = CodexConstructor.mock.calls[0]?.[0] as {
+      apiKey?: string;
+      env?: Record<string, string>;
+      config?: unknown;
+    };
+    expect(clientOptions.apiKey).toBeUndefined();
+    expect(clientOptions.config).toBeUndefined();
+    expect(clientOptions.env?.CODEX_HOME).toBe(codexHome);
+    expect(clientOptions.env?.OPENAI_API_KEY).toBeUndefined();
+    expect(clientOptions.env?.CODEX_API_KEY).toBeUndefined();
+  });
+
   it("classifies sandbox startup failures with a dedicated error", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "wiki-codex-sdk-sandbox-"));
     tempDirs.push(root);

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { mkdirSync } from "node:fs";
 
 import { Codex, type CodexOptions, type Thread } from "@openai/codex-sdk";
 
@@ -42,24 +43,38 @@ interface CodexSdkWorkflowRunnerOptions {
 }
 
 function normalizeEnv(input: CodexWorkflowInput): Record<string, string> {
+  const agentSettings = resolveAgentSettings(input.env);
+  if (agentSettings.authMode === "codex-login" && agentSettings.codexHome) {
+    mkdirSync(agentSettings.codexHome, { recursive: true });
+  }
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries({
     ...process.env,
     ...input.env,
-    ...(input.env?.WIKI_AGENT_API_KEY && !input.env.OPENAI_API_KEY ? { OPENAI_API_KEY: input.env.WIKI_AGENT_API_KEY } : {}),
+    ...(agentSettings.authMode === "api-key" && agentSettings.apiKey && !input.env?.OPENAI_API_KEY
+      ? { OPENAI_API_KEY: agentSettings.apiKey }
+      : {}),
+    ...(agentSettings.authMode === "codex-login" && agentSettings.codexHome
+      ? { CODEX_HOME: agentSettings.codexHome }
+      : {}),
   })) {
     if (typeof value === "string") {
       normalized[key] = value;
     }
+  }
+  if (agentSettings.authMode === "codex-login") {
+    delete normalized.OPENAI_API_KEY;
+    delete normalized.CODEX_API_KEY;
   }
   normalized.PATH = [input.skillArtifactsPath, normalized.PATH].filter(Boolean).join(path.delimiter);
   return normalized;
 }
 
 function createCodexClient(input: CodexWorkflowInput): Codex {
+  const agentSettings = resolveAgentSettings(input.env);
   const env = normalizeEnv(input);
-  const baseUrl = input.env?.WIKI_AGENT_BASE_URL?.trim();
-  const apiKey = input.env?.WIKI_AGENT_API_KEY?.trim();
+  const baseUrl = agentSettings.authMode === "api-key" ? agentSettings.baseUrl : null;
+  const apiKey = agentSettings.authMode === "api-key" ? agentSettings.apiKey : null;
 
   const options: CodexOptions = {
     apiKey: apiKey || undefined,

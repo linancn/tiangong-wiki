@@ -9,7 +9,8 @@ import {
   writeVaultFile,
 } from "../helpers.js";
 
-const hasRealAgentConfig = Boolean(process.env.WIKI_AGENT_API_KEY && process.env.WIKI_AGENT_MODEL);
+const agentAuthMode = process.env.WIKI_AGENT_AUTH_MODE === "codex-login" ? "codex-login" : "api-key";
+const hasRealAgentConfig = agentAuthMode === "codex-login" || Boolean(process.env.WIKI_AGENT_API_KEY);
 const describeIfConfigured = hasRealAgentConfig ? describe : describe.skip;
 
 describeIfConfigured("e2e: vault type routing with live Codex workflow", () => {
@@ -24,10 +25,16 @@ describeIfConfigured("e2e: vault type routing with live Codex workflow", () => {
   it("routes a workflow revision into the existing ontology without relying on source-summary as the only target", () => {
     const workspace = createWorkspace({
       WIKI_AGENT_ENABLED: "true",
-      WIKI_AGENT_API_KEY: process.env.WIKI_AGENT_API_KEY,
-      WIKI_AGENT_MODEL: process.env.WIKI_AGENT_MODEL,
+      WIKI_AGENT_AUTH_MODE: agentAuthMode,
+      WIKI_AGENT_MODEL: process.env.WIKI_AGENT_MODEL ?? "gpt-5.5",
       WIKI_AGENT_BATCH_SIZE: "10",
-      ...(process.env.WIKI_AGENT_BASE_URL ? { WIKI_AGENT_BASE_URL: process.env.WIKI_AGENT_BASE_URL } : {}),
+      ...(agentAuthMode === "api-key" ? { WIKI_AGENT_API_KEY: process.env.WIKI_AGENT_API_KEY } : {}),
+      ...(agentAuthMode === "codex-login" && process.env.WIKI_AGENT_CODEX_HOME
+        ? { WIKI_AGENT_CODEX_HOME: process.env.WIKI_AGENT_CODEX_HOME }
+        : {}),
+      ...(agentAuthMode === "api-key" && process.env.WIKI_AGENT_BASE_URL
+        ? { WIKI_AGENT_BASE_URL: process.env.WIKI_AGENT_BASE_URL }
+        : {}),
     });
     workspaces.push(workspace);
 

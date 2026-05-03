@@ -186,6 +186,7 @@ async function startForegroundDaemon(workspace: Workspace): Promise<ForegroundDa
     cwd: projectRoot(),
     env: workspace.env,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
 
   let logs = "";
@@ -279,6 +280,7 @@ async function reservePort(): Promise<{ port: number; close: () => Promise<void>
 async function startIdleProcess(): Promise<ChildProcess> {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
     stdio: "ignore",
+    windowsHide: true,
   });
   await waitFor(() => child.pid !== undefined);
   return child;

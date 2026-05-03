@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,6 +27,7 @@ function createFakeSkillsInstaller(workspaceRoot: string, mode: "success" | "fai
   const binDir = path.join(workspaceRoot, "fake-bin");
   mkdirSync(binDir, { recursive: true });
   const installerPath = path.join(binDir, "npx");
+  const installerCmdPath = path.join(binDir, "npx.cmd");
   writeFileSync(
     installerPath,
     mode === "success"
@@ -44,6 +46,31 @@ function createFakeSkillsInstaller(workspaceRoot: string, mode: "success" | "fai
           "",
         ].join("\n")
       : ['#!/bin/sh', 'echo "fake installer failure" >&2', "exit 7", ""].join("\n"),
+    "utf8",
+  );
+  writeFileSync(
+    installerCmdPath,
+    mode === "success"
+      ? [
+          "@echo off",
+          "set skill_name=",
+          ":loop",
+          "if \"%~1\"==\"\" goto done",
+          "if \"%~1\"==\"--skill\" (",
+          "  shift",
+          "  set skill_name=%~1",
+          ")",
+          "shift",
+          "goto loop",
+          ":done",
+          "mkdir \"%CD%\\.agents\\skills\\%skill_name%\" 2>NUL",
+          "> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo ---",
+          ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo name: %skill_name%",
+          ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo description: fake skill",
+          ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo ---",
+          "",
+        ].join("\r\n")
+      : ["@echo off", "echo fake installer failure 1>&2", "exit /b 7", ""].join("\r\n"),
     "utf8",
   );
   chmodSync(installerPath, 0o755);
@@ -260,8 +287,8 @@ describe("setup and doctor integration", () => {
       "n",
       "y",
       "",
-      "test-agent-key",
-      "gpt-5.4",
+      "",
+      "",
       "",
       "",
       "n",
@@ -282,8 +309,10 @@ describe("setup and doctor integration", () => {
     expect(envFilePath).toBeTruthy();
     const envFile = readFile(envFilePath!);
     expect(envFile).toContain("WIKI_AGENT_ENABLED=true");
-    expect(envFile).toContain("WIKI_AGENT_API_KEY=test-agent-key");
-    expect(envFile).toContain("WIKI_AGENT_MODEL=gpt-5.4");
+    expect(envFile).toContain("WIKI_AGENT_AUTH_MODE=codex-login");
+    expect(envFile).toContain(`WIKI_AGENT_CODEX_HOME=${path.join(os.homedir(), ".codex-tiangong-wiki")}`);
+    expect(envFile).not.toContain("WIKI_AGENT_API_KEY=");
+    expect(envFile).toContain("WIKI_AGENT_MODEL=gpt-5.5");
     expect(envFile).toContain("WIKI_AGENT_SANDBOX_MODE=danger-full-access");
   });
 

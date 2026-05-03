@@ -29,6 +29,7 @@ function runGit(
   const result = spawnSync("git", ["-C", paths.wikiRoot, ...args], {
     encoding: "utf8",
     env: buildGitEnv(actor),
+    windowsHide: true,
   });
   return {
     status: result.status,

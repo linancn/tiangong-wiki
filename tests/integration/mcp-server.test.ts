@@ -64,6 +64,7 @@ async function startForegroundDaemon(workspace: Workspace): Promise<ForegroundDa
     cwd: projectRoot(),
     env: workspace.env,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
 
   let logs = "";

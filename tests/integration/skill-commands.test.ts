@@ -10,6 +10,7 @@ function createFakeNpx(root: string): string {
   const fakeBin = path.join(root, "bin");
   mkdirSync(fakeBin, { recursive: true });
   const fakeNpx = path.join(fakeBin, "npx");
+  const fakeNpxCmd = path.join(fakeBin, "npx.cmd");
   writeFileSync(
     fakeNpx,
     [
@@ -37,6 +38,38 @@ function createFakeNpx(root: string): string {
       "printf '%s\\n' \"$source\" > \"$PWD/.agents/skills/$skill_name/SOURCE.txt\"",
       "",
     ].join("\n"),
+    "utf8",
+  );
+  writeFileSync(
+    fakeNpxCmd,
+    [
+      "@echo off",
+      "set skill_name=",
+      "set source=",
+      "set seen_add=0",
+      ":loop",
+      "if \"%~1\"==\"\" goto done",
+      "if \"%~1\"==\"add\" (",
+      "  set seen_add=1",
+      "  shift",
+      "  if not \"%~1\"==\"\" set source=%~1",
+      ") else if \"%~1\"==\"--skill\" (",
+      "  shift",
+      "  set skill_name=%~1",
+      ")",
+      "shift",
+      "goto loop",
+      ":done",
+      "if not defined FAKE_SKILL_VERSION set FAKE_SKILL_VERSION=v1",
+      "mkdir \"%CD%\\.agents\\skills\\%skill_name%\" 2>NUL",
+      "> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo ---",
+      ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo name: %skill_name%",
+      ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo description: fake %FAKE_SKILL_VERSION%",
+      ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo ---",
+      "> \"%CD%\\.agents\\skills\\%skill_name%\\VERSION.txt\" echo %FAKE_SKILL_VERSION%",
+      "> \"%CD%\\.agents\\skills\\%skill_name%\\SOURCE.txt\" echo %source%",
+      "",
+    ].join("\r\n"),
     "utf8",
   );
   chmodSync(fakeNpx, 0o755);

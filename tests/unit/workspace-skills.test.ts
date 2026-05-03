@@ -5,7 +5,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  buildExternalSkillInstallInvocation,
   ensureWikiSkillInstall,
+  getNpxCommand,
   installParserSkill,
   parseParserSkills,
   resolveWorkspaceSkillPaths,
@@ -24,6 +26,13 @@ describe("workspace skills", () => {
     expect(parseParserSkills("pdf, docx,pdf")).toEqual(["pdf", "docx"]);
     expect(parseParserSkills("", { strict: false })).toEqual([]);
     expect(() => parseParserSkills("pdf,unknown")).toThrow(/unsupported skills/i);
+  });
+
+  it("uses the npm .cmd shim for external skill installs on Windows", () => {
+    expect(getNpxCommand("win32")).toBe("npx.cmd");
+    expect(getNpxCommand("darwin")).toBe("npx");
+    expect(getNpxCommand("linux")).toBe("npx");
+    expect(buildExternalSkillInstallInvocation("repo", "pdf").args).toContain("--skill");
   });
 
   it("creates a workspace-local tiangong-wiki-skill symlink", () => {
@@ -59,7 +68,9 @@ describe("workspace skills", () => {
     const installed = ensureWikiSkillInstall(wikiPath, packageRoot);
 
     expect(installed.status).toBe("updated");
-    expect(lstatSync(copiedSkillPath).isSymbolicLink()).toBe(true);
+    if (process.platform !== "win32") {
+      expect(lstatSync(copiedSkillPath).isSymbolicLink()).toBe(true);
+    }
     expect(realpathSync(copiedSkillPath)).toBe(realpathSync(packageRoot));
   });
 
@@ -73,6 +84,7 @@ describe("workspace skills", () => {
     mkdirSync(fakeBin, { recursive: true });
 
     const fakeNpx = path.join(fakeBin, "npx");
+    const fakeNpxCmd = path.join(fakeBin, "npx.cmd");
     writeFileSync(
       fakeNpx,
       [
@@ -89,6 +101,29 @@ describe("workspace skills", () => {
         "printf '%s\\n' '---' \"name: $skill_name\" 'description: fake' '---' > \"$PWD/.agents/skills/$skill_name/SKILL.md\"",
         "",
       ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      fakeNpxCmd,
+      [
+        "@echo off",
+        "set skill_name=",
+        ":loop",
+        "if \"%~1\"==\"\" goto done",
+        "if \"%~1\"==\"--skill\" (",
+        "  shift",
+        "  set skill_name=%~1",
+        ")",
+        "shift",
+        "goto loop",
+        ":done",
+        "mkdir \"%CD%\\.agents\\skills\\%skill_name%\" 2>NUL",
+        "> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo ---",
+        ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo name: %skill_name%",
+        ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo description: fake",
+        ">> \"%CD%\\.agents\\skills\\%skill_name%\\SKILL.md\" echo ---",
+        "",
+      ].join("\r\n"),
       "utf8",
     );
     chmodSync(fakeNpx, 0o755);

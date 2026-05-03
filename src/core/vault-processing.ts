@@ -1059,7 +1059,7 @@ function prepareCodexWorkflowInput(
       queueItemPath: artifacts.queueItemPath,
       resultPath: artifacts.resultPath,
       skillArtifactsPath: artifacts.skillArtifactsPath,
-      model: env.WIKI_AGENT_MODEL ?? null,
+      model: resolveAgentSettings(env).model,
       env,
     },
   };

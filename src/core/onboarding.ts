@@ -7,7 +7,14 @@ import { DEFAULT_WIKI_ENV_FILE, getCliEnvironmentInfo, parseEnvFile, serializeEn
 import { resolveTemplateFilePath, loadConfig } from "./config.js";
 import { EmbeddingClient } from "./embedding.js";
 import { writeGlobalConfig } from "./global-config.js";
-import { parseVaultHashMode, parseWikiAgentSandboxMode, resolveAgentSettings } from "./paths.js";
+import {
+  DEFAULT_WIKI_AGENT_MODEL,
+  defaultWikiAgentCodexHome,
+  parseVaultHashMode,
+  parseWikiAgentAuthMode,
+  parseWikiAgentSandboxMode,
+  resolveAgentSettings,
+} from "./paths.js";
 import { loadSynologyConfigFromEnv, normalizeSynologyRemotePath, withSynologyClient } from "./synology.js";
 import {
   ensureWikiSkillInstall,
@@ -25,6 +32,7 @@ import {
 import { scaffoldWorkspaceAssets } from "./workspace-bootstrap.js";
 import { AppError } from "../utils/errors.js";
 import { pathExistsSync, writeTextFileSync } from "../utils/fs.js";
+import type { WikiAgentAuthMode } from "../types/page.js";
 
 export type DoctorSeverity = "ok" | "warn" | "error";
 type VaultSource = "local" | "synology";
@@ -93,8 +101,10 @@ interface SetupValues {
   embeddingModel: string | null;
   embeddingDimensions: string | null;
   agentEnabled: boolean;
+  agentAuthMode: WikiAgentAuthMode | null;
   agentBaseUrl: string | null;
   agentApiKey: string | null;
+  agentCodexHome: string | null;
   agentModel: string | null;
   agentBatchSize: string | null;
   agentSandboxMode: "danger-full-access" | "workspace-write" | null;
@@ -170,8 +180,10 @@ const MANAGED_ENV_KEYS = new Set([
   "EMBEDDING_MODEL",
   "EMBEDDING_DIMENSIONS",
   "WIKI_AGENT_ENABLED",
+  "WIKI_AGENT_AUTH_MODE",
   "WIKI_AGENT_BASE_URL",
   "WIKI_AGENT_API_KEY",
+  "WIKI_AGENT_CODEX_HOME",
   "WIKI_AGENT_MODEL",
   "WIKI_AGENT_BATCH_SIZE",
   "WIKI_AGENT_SANDBOX_MODE",
@@ -230,6 +242,18 @@ function safeAgentSandboxMode(rawValue: string | undefined): "danger-full-access
   }
 }
 
+function safeAgentAuthMode(env: NodeJS.ProcessEnv): WikiAgentAuthMode {
+  try {
+    if (env.WIKI_AGENT_AUTH_MODE && env.WIKI_AGENT_AUTH_MODE.trim()) {
+      return parseWikiAgentAuthMode(env.WIKI_AGENT_AUTH_MODE);
+    }
+  } catch {
+    return env.WIKI_AGENT_API_KEY?.trim() ? "api-key" : "codex-login";
+  }
+
+  return env.WIKI_AGENT_API_KEY?.trim() ? "api-key" : "codex-login";
+}
+
 function safeBooleanFlag(rawValue: string | undefined, defaultValue: boolean): boolean {
   if (rawValue === undefined || rawValue.trim().length === 0) {
     return defaultValue;
@@ -266,6 +290,14 @@ function validateWikiPath(rawValue: string): string | null {
   const normalized = rawValue.replace(/[\\/]+$/g, "");
   if (!normalized.endsWith("/pages") && !normalized.endsWith("\\pages")) {
     return "WIKI_PATH must point to the wiki/pages directory.";
+  }
+
+  return null;
+}
+
+function validateAbsolutePath(rawValue: string, label: string): string | null {
+  if (!path.isAbsolute(rawValue.trim())) {
+    return `${label} must be an absolute path.`;
   }
 
   return null;
@@ -609,6 +641,7 @@ function getPathDefaults(env: NodeJS.ProcessEnv, cwd: string): SetupValues {
   const configPath = env.WIKI_CONFIG_PATH ? path.resolve(env.WIKI_CONFIG_PATH) : path.join(wikiRoot, "wiki.config.json");
   const templatesPath = env.WIKI_TEMPLATES_PATH ? path.resolve(env.WIKI_TEMPLATES_PATH) : path.join(wikiRoot, "templates");
   const defaultHashMode = vaultSource === "synology" ? "mtime" : "content";
+  const agentAuthMode = safeAgentAuthMode(env);
 
   return {
     envFilePath: env.WIKI_ENV_FILE ? path.resolve(cwd, env.WIKI_ENV_FILE) : path.join(cwd, DEFAULT_WIKI_ENV_FILE),
@@ -632,9 +665,11 @@ function getPathDefaults(env: NodeJS.ProcessEnv, cwd: string): SetupValues {
     embeddingModel: env.EMBEDDING_MODEL ?? env.OPENROUTER_EMBEDDING_MODEL ?? "text-embedding-3-small",
     embeddingDimensions: env.EMBEDDING_DIMENSIONS ?? "384",
     agentEnabled: (env.WIKI_AGENT_ENABLED ?? "").trim().toLowerCase() === "true",
-    agentBaseUrl: env.WIKI_AGENT_BASE_URL ?? "https://api.openai.com/v1",
+    agentAuthMode,
+    agentBaseUrl: env.WIKI_AGENT_BASE_URL ?? (agentAuthMode === "api-key" ? "https://api.openai.com/v1" : null),
     agentApiKey: env.WIKI_AGENT_API_KEY ?? null,
-    agentModel: env.WIKI_AGENT_MODEL ?? null,
+    agentCodexHome: env.WIKI_AGENT_CODEX_HOME ?? defaultWikiAgentCodexHome(),
+    agentModel: env.WIKI_AGENT_MODEL ?? DEFAULT_WIKI_AGENT_MODEL,
     agentBatchSize: env.WIKI_AGENT_BATCH_SIZE ?? "5",
     agentSandboxMode: safeAgentSandboxMode(env.WIKI_AGENT_SANDBOX_MODE),
     parserSkills: parseParserSkills(env.WIKI_PARSER_SKILLS, { strict: false }),
@@ -718,7 +753,17 @@ async function collectAgentSettings(
   ctx: PromptContext,
   defaults: SetupValues,
 ): Promise<
-  Pick<SetupValues, "agentEnabled" | "agentBaseUrl" | "agentApiKey" | "agentModel" | "agentBatchSize" | "agentSandboxMode">
+  Pick<
+    SetupValues,
+    | "agentEnabled"
+    | "agentAuthMode"
+    | "agentBaseUrl"
+    | "agentApiKey"
+    | "agentCodexHome"
+    | "agentModel"
+    | "agentBatchSize"
+    | "agentSandboxMode"
+  >
 > {
   const enabled = await promptYesNo(
     driver,
@@ -728,8 +773,10 @@ async function collectAgentSettings(
   if (!enabled) {
     return {
       agentEnabled: false,
+      agentAuthMode: null,
       agentBaseUrl: null,
       agentApiKey: null,
+      agentCodexHome: null,
       agentModel: null,
       agentBatchSize: null,
       agentSandboxMode: null,
@@ -738,19 +785,55 @@ async function collectAgentSettings(
 
   writeWarning(ctx.output, "Warning: danger-full-access grants full access to the runtime workspace.");
 
+  const agentAuthMode = await driver.select<WikiAgentAuthMode>({
+    message: "WIKI_AGENT_AUTH_MODE",
+    defaultValue: defaults.agentAuthMode ?? "codex-login",
+    choices: [
+      {
+        value: "codex-login",
+        label: "codex-login",
+        description: "Use a local Codex ChatGPT login stored under WIKI_AGENT_CODEX_HOME.",
+      },
+      {
+        value: "api-key",
+        label: "api-key",
+        description: "Use WIKI_AGENT_API_KEY and optional WIKI_AGENT_BASE_URL.",
+      },
+    ],
+  });
+
+  const authSettings = agentAuthMode === "api-key"
+    ? {
+        agentBaseUrl: await promptText(
+          driver,
+          "WIKI_AGENT_BASE_URL",
+          defaults.agentBaseUrl ?? "https://api.openai.com/v1",
+          { validator: (value) => validateUrl(value, "WIKI_AGENT_BASE_URL") },
+        ),
+        agentApiKey: await promptPassword(driver, "WIKI_AGENT_API_KEY", defaults.agentApiKey ?? "", {
+          required: true,
+        }),
+        agentCodexHome: null,
+      }
+    : {
+        agentBaseUrl: null,
+        agentApiKey: null,
+        agentCodexHome: await promptText(
+          driver,
+          "WIKI_AGENT_CODEX_HOME",
+          defaults.agentCodexHome ?? defaultWikiAgentCodexHome(),
+          { validator: (value) => validateAbsolutePath(value, "WIKI_AGENT_CODEX_HOME") },
+        ),
+      };
+
   return {
     agentEnabled: true,
-    agentBaseUrl: await promptText(
-      driver,
-      "WIKI_AGENT_BASE_URL",
-      defaults.agentBaseUrl ?? "https://api.openai.com/v1",
-      { validator: (value) => validateUrl(value, "WIKI_AGENT_BASE_URL") },
-    ),
-    agentApiKey: await promptPassword(driver, "WIKI_AGENT_API_KEY", defaults.agentApiKey ?? "", { required: true }),
+    agentAuthMode,
+    ...authSettings,
     agentModel: await promptText(
       driver,
       "WIKI_AGENT_MODEL",
-      defaults.agentModel ?? "",
+      defaults.agentModel ?? DEFAULT_WIKI_AGENT_MODEL,
       { required: true },
     ),
     agentBatchSize: await promptText(
@@ -886,7 +969,13 @@ function buildSetupSummary(values: SetupValues): string {
   }
 
   if (values.agentEnabled) {
-    lines.push(`  WIKI_AGENT_BASE_URL: ${values.agentBaseUrl}`);
+    lines.push(`  WIKI_AGENT_AUTH_MODE: ${values.agentAuthMode}`);
+    if (values.agentAuthMode === "api-key") {
+      lines.push(`  WIKI_AGENT_BASE_URL: ${values.agentBaseUrl}`);
+    }
+    if (values.agentAuthMode === "codex-login") {
+      lines.push(`  WIKI_AGENT_CODEX_HOME: ${values.agentCodexHome}`);
+    }
     lines.push(`  WIKI_AGENT_MODEL: ${values.agentModel}`);
     lines.push(`  WIKI_AGENT_BATCH_SIZE: ${values.agentBatchSize}`);
     lines.push(`  WIKI_AGENT_SANDBOX_MODE: ${values.agentSandboxMode}`);
@@ -928,8 +1017,10 @@ function writeSetupEnvFile(values: SetupValues): void {
     ["EMBEDDING_MODEL", values.embeddingEnabled ? values.embeddingModel : null],
     ["EMBEDDING_DIMENSIONS", values.embeddingEnabled ? values.embeddingDimensions : null],
     ["WIKI_AGENT_ENABLED", values.agentEnabled ? "true" : "false"],
-    ["WIKI_AGENT_BASE_URL", values.agentEnabled ? values.agentBaseUrl : null],
-    ["WIKI_AGENT_API_KEY", values.agentEnabled ? values.agentApiKey : null],
+    ["WIKI_AGENT_AUTH_MODE", values.agentEnabled ? values.agentAuthMode : null],
+    ["WIKI_AGENT_BASE_URL", values.agentEnabled && values.agentAuthMode === "api-key" ? values.agentBaseUrl : null],
+    ["WIKI_AGENT_API_KEY", values.agentEnabled && values.agentAuthMode === "api-key" ? values.agentApiKey : null],
+    ["WIKI_AGENT_CODEX_HOME", values.agentEnabled && values.agentAuthMode === "codex-login" ? values.agentCodexHome : null],
     ["WIKI_AGENT_MODEL", values.agentEnabled ? values.agentModel : null],
     ["WIKI_AGENT_BATCH_SIZE", values.agentEnabled ? values.agentBatchSize : null],
     ["WIKI_AGENT_SANDBOX_MODE", values.agentEnabled ? values.agentSandboxMode : null],
@@ -1443,7 +1534,9 @@ function inspectAgent(checks: DoctorCheck[], env: NodeJS.ProcessEnv): void {
       checks,
       "ok",
       "agent",
-      `Automatic vault processing is enabled with model ${settings.model}.`,
+      settings.authMode === "codex-login"
+        ? `Automatic vault processing is enabled with model ${settings.model} via Codex login at ${settings.codexHome}.`
+        : `Automatic vault processing is enabled with model ${settings.model} via API key auth.`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
