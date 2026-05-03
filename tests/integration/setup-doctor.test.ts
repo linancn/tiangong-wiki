@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { parseEnvFile } from "../../src/core/cli-env.js";
 import { cleanupWorkspace, createWorkspace, readFile, readJson, runCli, startSynologyServer } from "../helpers.js";
 
 function stripWikiEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -308,9 +309,10 @@ describe("setup and doctor integration", () => {
     const envFilePath = setup.stdout.match(/configuration file: (.+)/)?.[1]?.trim();
     expect(envFilePath).toBeTruthy();
     const envFile = readFile(envFilePath!);
+    const parsedEnvFile = parseEnvFile(envFile);
     expect(envFile).toContain("WIKI_AGENT_ENABLED=true");
     expect(envFile).toContain("WIKI_AGENT_AUTH_MODE=codex-login");
-    expect(envFile).toContain(`WIKI_AGENT_CODEX_HOME=${path.join(os.homedir(), ".codex-tiangong-wiki")}`);
+    expect(parsedEnvFile.WIKI_AGENT_CODEX_HOME).toBe(path.join(os.homedir(), ".codex-tiangong-wiki"));
     expect(envFile).not.toContain("WIKI_AGENT_API_KEY=");
     expect(envFile).toContain("WIKI_AGENT_MODEL=gpt-5.5");
     expect(envFile).toContain("WIKI_AGENT_SANDBOX_MODE=danger-full-access");

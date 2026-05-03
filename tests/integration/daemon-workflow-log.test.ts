@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FakeCodexWorkflowRunner } from "../../src/core/codex-workflow.js";
@@ -124,6 +126,6 @@ describe("daemon workflow observability", () => {
     );
 
     const item = queue.items.find((entry) => entry.fileId === "imports/evidence-review.pdf");
-    expect(item?.resultManifestPath).toContain("/tiangong-wiki/.queue-artifacts/");
+    expect(item?.resultManifestPath).toContain(path.join("tiangong-wiki", ".queue-artifacts"));
   });
 });

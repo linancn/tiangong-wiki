@@ -1,3 +1,4 @@
+import path from "node:path";
 import { PassThrough } from "node:stream";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -80,7 +81,7 @@ describe("onboarding inquirer driver", () => {
       },
     );
 
-    expect(result.envFilePath).toBe(`${workspace.root}/.wiki.env`);
+    expect(result.envFilePath).toBe(path.join(workspace.root, ".wiki.env"));
     expect(promptMocks.select).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "VAULT_SOURCE",
@@ -100,7 +101,7 @@ describe("onboarding inquirer driver", () => {
       expect.any(Object),
     );
 
-    const envFile = readFile(`${workspace.root}/.wiki.env`);
+    const envFile = readFile(path.join(workspace.root, ".wiki.env"));
     expect(envFile).toContain("VAULT_SOURCE=synology");
     expect(envFile).toContain("VAULT_HASH_MODE=mtime");
     expect(envFile).toContain("SYNOLOGY_PASSWORD=secret");

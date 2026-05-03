@@ -40,6 +40,27 @@ describe("CodexSdkWorkflowRunner", () => {
     }
   });
 
+  it("adds a hidden-window default to Codex SDK child process spawns", async () => {
+    const calls: unknown[][] = [];
+    const fakeSpawn = ((...args: unknown[]) => {
+      calls.push(args);
+      return {} as never;
+    }) as typeof import("node:child_process").spawn;
+
+    const { createHiddenWindowsSpawn } = await import("../../src/core/codex-workflow.js");
+    const spawn = createHiddenWindowsSpawn(fakeSpawn);
+
+    spawn("codex.exe", ["exec"], { env: { CODEX_HOME: "C:\\codex-home" } });
+    spawn("codex.exe", ["exec"], { windowsHide: false });
+    spawn("codex.exe", { cwd: "C:\\workspace" });
+    spawn("codex.exe");
+
+    expect(calls[0]?.[2]).toEqual({ env: { CODEX_HOME: "C:\\codex-home" }, windowsHide: true });
+    expect(calls[1]?.[2]).toEqual({ windowsHide: false });
+    expect(calls[2]?.[1]).toEqual({ cwd: "C:\\workspace", windowsHide: true });
+    expect(calls[3]?.[1]).toEqual({ windowsHide: true });
+  });
+
   it("defaults to danger-full-access, supports sandbox override, and persists runtime thread ids for start and resume", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "wiki-codex-sdk-runner-"));
     tempDirs.push(root);

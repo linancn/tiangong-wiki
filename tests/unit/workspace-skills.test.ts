@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   buildExternalSkillInstallInvocation,
+  buildExternalSkillInstallSpawnInvocation,
   ensureWikiSkillInstall,
   getNpxCommand,
   installParserSkill,
@@ -34,6 +35,20 @@ describe("workspace skills", () => {
     expect(getNpxCommand("linux")).toBe("npx");
     expect(buildExternalSkillInstallInvocation("repo", "pdf").args).toContain("--skill");
     expect(buildExternalSkillInstallInvocation("custom skill source", "pdf").rendered).toContain('"custom skill source"');
+
+    const invocation = {
+      ...buildExternalSkillInstallInvocation("custom skill source", "pdf"),
+      command: getNpxCommand("win32"),
+    };
+    expect(buildExternalSkillInstallSpawnInvocation(invocation, "win32", { ComSpec: "C:\\Windows\\System32\\cmd.exe" })).toEqual({
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: [
+        "/d",
+        "/s",
+        "/c",
+        '"npx.cmd" "-y" "skills" "add" "custom skill source" "--skill" "pdf" "-a" "codex" "-y"',
+      ],
+    });
   });
 
   it("creates a workspace-local tiangong-wiki-skill symlink", () => {

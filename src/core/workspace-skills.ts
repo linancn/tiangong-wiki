@@ -423,6 +423,28 @@ export function buildExternalSkillInstallInvocation(source: string, skillName: s
   };
 }
 
+function quoteWindowsCmdArgument(value: string): string {
+  return `"${value.replace(/%/g, "%%").replace(/"/g, '\\"')}"`;
+}
+
+export function buildExternalSkillInstallSpawnInvocation(
+  invocation: { command: string; args: string[] },
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): { command: string; args: string[] } {
+  if (platform !== "win32") {
+    return {
+      command: invocation.command,
+      args: invocation.args,
+    };
+  }
+
+  return {
+    command: env.ComSpec?.trim() || "cmd.exe",
+    args: ["/d", "/s", "/c", [invocation.command, ...invocation.args].map(quoteWindowsCmdArgument).join(" ")],
+  };
+}
+
 function installManagedExternalSkill(
   descriptor: ManagedSkillDescriptor,
   options: {
@@ -451,7 +473,8 @@ function installManagedExternalSkill(
 
   const workspaceRoot = getWorkspaceRootForSkillPath(descriptor.skillPath);
   options.output?.write(`Installing skill ${descriptor.name} from ${descriptor.source}...\n`);
-  const result = spawnSync(invocation.command, invocation.args, {
+  const spawnInvocation = buildExternalSkillInstallSpawnInvocation(invocation);
+  const result = spawnSync(spawnInvocation.command, spawnInvocation.args, {
     cwd: workspaceRoot,
     env: options.env ?? process.env,
     encoding: "utf8",

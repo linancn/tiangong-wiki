@@ -460,7 +460,7 @@ A concept and theorem about belief updates and probabilistic definitions.
         expect.objectContaining({
           id: "imports/spec.pdf",
           fileExt: "pdf",
-          filePath: expect.stringContaining("imports/spec.pdf"),
+          filePath: expect.stringContaining(path.join("imports", "spec.pdf")),
         }),
       ]),
     );

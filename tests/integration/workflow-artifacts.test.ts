@@ -59,7 +59,7 @@ describe("workflow artifacts", () => {
       artifacts.promptPath,
       artifacts.resultPath,
       artifacts.skillArtifactsPath,
-    ].map((entry) => entry.replace(`${artifacts.rootDir}/`, ""));
+    ].map((entry) => path.relative(artifacts.rootDir, entry));
 
     expect(relativeEntries).toEqual([
       "queue-item.json",
