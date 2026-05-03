@@ -129,7 +129,7 @@ describe("setup and doctor integration", () => {
     expect(setup.status).toBe(0);
     expect(setup.stdout).toContain("tiangong-wiki setup complete");
 
-    const envFilePath = `${workspace.root}/.wiki.env`;
+    const envFilePath = path.join(workspace.root, ".wiki.env");
     const envFile = readFile(envFilePath);
     const globalConfigPath = setup.stdout.match(/default workspace config: (.+)/)?.[1]?.trim();
     expect(envFile).toContain("WIKI_PATH=");
@@ -137,7 +137,7 @@ describe("setup and doctor integration", () => {
     expect(envFile).toContain("WIKI_AGENT_ENABLED=false");
     expect(envFile).toContain("WIKI_PARSER_SKILLS=pdf");
     expect(globalConfigPath).toBeTruthy();
-    expect(readFile(globalConfigPath!)).toContain(realpathSync(envFilePath));
+    expect(readJson<{ defaultEnvFile: string }>(readFile(globalConfigPath!)).defaultEnvFile).toBe(realpathSync(envFilePath));
     expect(readFile(path.join(workspace.root, ".agents", "skills", "tiangong-wiki-skill", "SKILL.md"))).toContain(
       "name: tiangong-wiki-skill",
     );

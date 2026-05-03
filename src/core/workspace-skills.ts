@@ -423,21 +423,10 @@ export function buildExternalSkillInstallInvocation(source: string, skillName: s
   };
 }
 
-const WINDOWS_CMD_ARGUMENT_NEEDS_QUOTES = /[\s&()<>^|"]/;
-
-function renderWindowsCmdArgument(value: string): string {
-  const escaped = value.replace(/%/g, "%%").replace(/"/g, '""');
-  if (escaped && !WINDOWS_CMD_ARGUMENT_NEEDS_QUOTES.test(escaped)) {
-    return escaped;
-  }
-  return `"${escaped}"`;
-}
-
 export function buildExternalSkillInstallSpawnInvocation(
   invocation: { command: string; args: string[] },
   platform: NodeJS.Platform = process.platform,
-  env: NodeJS.ProcessEnv = process.env,
-): { command: string; args: string[] } {
+): { command: string; args: string[]; shell?: boolean } {
   if (platform !== "win32") {
     return {
       command: invocation.command,
@@ -446,8 +435,9 @@ export function buildExternalSkillInstallSpawnInvocation(
   }
 
   return {
-    command: env.ComSpec?.trim() || "cmd.exe",
-    args: ["/d", "/s", "/c", [invocation.command, ...invocation.args].map(renderWindowsCmdArgument).join(" ")],
+    command: invocation.command,
+    args: invocation.args,
+    shell: true,
   };
 }
 
@@ -484,6 +474,7 @@ function installManagedExternalSkill(
     cwd: workspaceRoot,
     env: options.env ?? process.env,
     encoding: "utf8",
+    shell: spawnInvocation.shell,
     windowsHide: true,
   });
 
