@@ -49,8 +49,8 @@ describe("template lint", () => {
 
     const methodTemplatePath = path.join(workspace.wikiRoot, "templates", "method.md");
     const mutatedTemplate = readFile(methodTemplatePath)
-      .replace("applicableTo: []\n", "surpriseField: yes\n")
-      .replace(/\n## /g, "\n### ");
+      .replace(/applicableTo: \[\]\r?\n/, "surpriseField: yes\n")
+      .replace(/\r?\n## /g, "\n### ");
     writeFileSync(methodTemplatePath, mutatedTemplate, "utf8");
 
     updateWikiConfig(workspace, (config) => {

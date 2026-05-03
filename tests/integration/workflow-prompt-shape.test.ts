@@ -27,6 +27,7 @@ describe("workflow prompt shape", () => {
     expect(prompt).toContain("ALLOW_TEMPLATE_EVOLUTION=false");
     expect(prompt).toContain("## Environment");
     expect(prompt).toContain("Workspace-local skills are available from WORKSPACE_ROOT");
+    expect(prompt).toContain("On Windows native shells, use `tiangong-wiki.cmd`");
     expect(prompt).toContain("tiangong-wiki type list");
     expect(prompt).toContain("tiangong-wiki template show <type>");
     expect(prompt).toContain("tiangong-wiki page-info <pageId>");

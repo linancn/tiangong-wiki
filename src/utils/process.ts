@@ -8,6 +8,11 @@ interface Invocation {
   args: string[];
 }
 
+export interface OpenTargetInvocation {
+  command: string;
+  args: string[];
+}
+
 export function getCurrentInvocation(): Invocation {
   const [, argv1, argv2] = process.argv;
   if (!argv1) {
@@ -28,44 +33,57 @@ export function getCurrentInvocation(): Invocation {
   };
 }
 
+export function buildDetachedSpawnOptions(
+  options: { env?: NodeJS.ProcessEnv; logFile?: string } = {},
+): {
+  detached: true;
+  stdio: "ignore" | ["ignore", number, number];
+  env: NodeJS.ProcessEnv;
+  windowsHide: true;
+} {
+  const stdio: "ignore" | ["ignore", number, number] = options.logFile
+    ? ["ignore", openSync(options.logFile, "a"), openSync(options.logFile, "a")]
+    : "ignore";
+
+  return {
+    detached: true,
+    stdio,
+    env: options.env ?? process.env,
+    windowsHide: true,
+  };
+}
+
 export function spawnDetachedCurrentProcess(
   extraArgs: string[],
   options: { env?: NodeJS.ProcessEnv; logFile?: string } = {},
 ): number | undefined {
   const invocation = getCurrentInvocation();
-  const stdio: "ignore" | ["ignore", number, number] = options.logFile
-    ? ["ignore", openSync(options.logFile, "a"), openSync(options.logFile, "a")]
-    : "ignore";
-
-  const child = spawn(invocation.command, [...invocation.args, ...extraArgs], {
-    detached: true,
-    stdio,
-    env: options.env ?? process.env,
-  });
+  const child = spawn(invocation.command, [...invocation.args, ...extraArgs], buildDetachedSpawnOptions(options));
   child.unref();
   return child.pid;
 }
 
-export function openTarget(target: string): void {
-  let command = "";
-  let args: string[] = [];
-
-  if (process.platform === "darwin") {
-    command = "open";
-    args = [target];
-  } else if (process.platform === "win32") {
-    command = "cmd";
-    args = ["/c", "start", "", target];
-  } else {
-    command = "xdg-open";
-    args = [target];
+export function buildOpenTargetInvocation(
+  target: string,
+  platform: NodeJS.Platform = process.platform,
+): OpenTargetInvocation {
+  if (platform === "darwin") {
+    return { command: "open", args: [target] };
   }
+  if (platform === "win32") {
+    return { command: "rundll32.exe", args: ["url.dll,FileProtocolHandler", target] };
+  }
+  return { command: "xdg-open", args: [target] };
+}
 
+export function openTarget(target: string): void {
+  const { command, args } = buildOpenTargetInvocation(target);
   try {
     const child = spawn(command, args, {
       detached: true,
       stdio: "ignore",
       shell: false,
+      windowsHide: true,
     });
     child.unref();
   } catch (error) {

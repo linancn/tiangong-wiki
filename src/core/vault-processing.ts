@@ -11,6 +11,7 @@ import {
 } from "./codex-workflow.js";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db.js";
+import { DEFAULT_EMBEDDING_DIMENSIONS } from "./embedding.js";
 import { resolveAgentSettings, resolveRuntimePaths } from "./paths.js";
 import { assertTemplateEvolutionAllowed, resolveTemplateEvolutionSettings } from "./template-evolution.js";
 import { ensureLocalVaultFile } from "./vault.js";
@@ -1059,7 +1060,7 @@ function prepareCodexWorkflowInput(
       queueItemPath: artifacts.queueItemPath,
       resultPath: artifacts.resultPath,
       skillArtifactsPath: artifacts.skillArtifactsPath,
-      model: env.WIKI_AGENT_MODEL ?? null,
+      model: resolveAgentSettings(env).model,
       env,
     },
   };
@@ -1339,7 +1340,12 @@ export function getVaultQueueSnapshot(
 } {
   const paths = resolveRuntimePaths(env);
   const config = loadConfig(paths.configPath);
-  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384, paths.packageRoot);
+  const { db } = openDb(
+    paths.dbPath,
+    config,
+    Number.parseInt(env.EMBEDDING_DIMENSIONS ?? String(DEFAULT_EMBEDDING_DIMENSIONS), 10) || DEFAULT_EMBEDDING_DIMENSIONS,
+    paths.packageRoot,
+  );
 
   try {
     const items = fetchQueueItemsByStatus(db, status);
@@ -1374,7 +1380,12 @@ export function getVaultQueueItem(
 ): VaultQueueItem | null {
   const paths = resolveRuntimePaths(env);
   const config = loadConfig(paths.configPath);
-  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384, paths.packageRoot);
+  const { db } = openDb(
+    paths.dbPath,
+    config,
+    Number.parseInt(env.EMBEDDING_DIMENSIONS ?? String(DEFAULT_EMBEDDING_DIMENSIONS), 10) || DEFAULT_EMBEDDING_DIMENSIONS,
+    paths.packageRoot,
+  );
 
   try {
     return fetchQueueItemByFileId(db, fileId);
@@ -1407,7 +1418,12 @@ export async function processVaultQueueBatch(
 
   const paths = resolveRuntimePaths(env);
   const config = loadConfig(paths.configPath);
-  const { db } = openDb(paths.dbPath, config, Number.parseInt(env.EMBEDDING_DIMENSIONS ?? "384", 10) || 384, paths.packageRoot);
+  const { db } = openDb(
+    paths.dbPath,
+    config,
+    Number.parseInt(env.EMBEDDING_DIMENSIONS ?? String(DEFAULT_EMBEDDING_DIMENSIONS), 10) || DEFAULT_EMBEDDING_DIMENSIONS,
+    paths.packageRoot,
+  );
 
   try {
     const result: QueueProcessResult = {

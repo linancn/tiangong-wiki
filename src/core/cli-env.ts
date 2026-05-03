@@ -53,7 +53,26 @@ function unquoteEnvValue(rawValue: string): string {
   }
 
   if (value.startsWith('"') && value.endsWith('"')) {
-    return value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    const inner = value.slice(1, -1);
+    let output = "";
+    for (let index = 0; index < inner.length; index += 1) {
+      const current = inner[index];
+      if (current !== "\\" || index === inner.length - 1) {
+        output += current;
+        continue;
+      }
+
+      const next = inner[index + 1];
+      index += 1;
+      if (next === "n") {
+        output += "\n";
+      } else if (next === '"' || next === "\\") {
+        output += next;
+      } else {
+        output += `\\${next}`;
+      }
+    }
+    return output;
   }
 
   if (value.startsWith("'") && value.endsWith("'")) {

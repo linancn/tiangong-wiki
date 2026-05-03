@@ -97,10 +97,14 @@ export interface VaultQueueStats {
   totalError: number;
 }
 
+export type WikiAgentAuthMode = "api-key" | "codex-login";
+
 export interface AgentProcessingSettings {
   enabled: boolean;
+  authMode: WikiAgentAuthMode;
   baseUrl: string | null;
   apiKey: string | null;
+  codexHome: string | null;
   model: string | null;
   batchSize: number;
   sandboxMode: WikiAgentSandboxMode;

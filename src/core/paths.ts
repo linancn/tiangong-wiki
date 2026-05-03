@@ -1,11 +1,19 @@
 import { fileURLToPath } from "node:url";
+import os from "node:os";
 import path from "node:path";
 
 import { AppError } from "../utils/errors.js";
-import type { AgentProcessingSettings, RuntimePaths, WikiAgentBackend, WikiAgentSandboxMode } from "../types/page.js";
+import type {
+  AgentProcessingSettings,
+  RuntimePaths,
+  WikiAgentAuthMode,
+  WikiAgentBackend,
+  WikiAgentSandboxMode,
+} from "../types/page.js";
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 const FALSE_VALUES = new Set(["0", "false", "no", "off"]);
+export const DEFAULT_WIKI_AGENT_MODEL = "gpt-5.5";
 
 function parseBooleanFlag(label: string, rawValue: string | undefined, defaultValue: boolean): boolean {
   if (rawValue === undefined) {
@@ -100,6 +108,23 @@ function requireAbsolutePath(label: string, rawValue: string | undefined): strin
   return path.resolve(rawValue);
 }
 
+function normalizeOptionalAbsolutePath(label: string, rawValue: string | undefined): string | null {
+  const value = rawValue?.trim();
+  if (!value) {
+    return null;
+  }
+
+  if (!path.isAbsolute(value)) {
+    throw new AppError(`${label} must be an absolute path: ${rawValue}`, "config");
+  }
+
+  return path.resolve(value);
+}
+
+export function defaultWikiAgentCodexHome(): string {
+  return path.join(os.homedir(), ".codex-tiangong-wiki");
+}
+
 export function parseVaultHashMode(raw: string | undefined): "content" | "mtime" {
   const value = (raw ?? "content").trim().toLowerCase();
   if (value === "content" || value === "mtime") {
@@ -121,6 +146,18 @@ export function parseWikiAgentBackend(raw: string | undefined): WikiAgentBackend
   );
 }
 
+export function parseWikiAgentAuthMode(raw: string | undefined): WikiAgentAuthMode {
+  const value = (raw ?? "api-key").trim().toLowerCase();
+  if (value === "api-key" || value === "codex-login") {
+    return value;
+  }
+
+  throw new AppError(
+    `WIKI_AGENT_AUTH_MODE must be "api-key" or "codex-login", got ${raw}`,
+    "config",
+  );
+}
+
 export function parseWikiAgentSandboxMode(raw: string | undefined): WikiAgentSandboxMode {
   const value = (raw ?? "danger-full-access").trim().toLowerCase();
   if (value === "danger-full-access" || value === "workspace-write") {
@@ -138,9 +175,15 @@ export function resolveAgentSettings(
   options: { strict?: boolean } = {},
 ): AgentProcessingSettings {
   const enabled = parseBooleanFlag("WIKI_AGENT_ENABLED", env.WIKI_AGENT_ENABLED, false);
-  const baseUrl = normalizeOptionalUrl(env.WIKI_AGENT_BASE_URL);
-  const apiKey = env.WIKI_AGENT_API_KEY?.trim() || null;
-  const model = env.WIKI_AGENT_MODEL?.trim() || null;
+  const authMode = parseWikiAgentAuthMode(env.WIKI_AGENT_AUTH_MODE);
+  const rawBaseUrl = normalizeOptionalUrl(env.WIKI_AGENT_BASE_URL);
+  const baseUrl = authMode === "api-key" ? rawBaseUrl : null;
+  const rawApiKey = env.WIKI_AGENT_API_KEY?.trim() || null;
+  const apiKey = authMode === "api-key" ? rawApiKey : null;
+  const codexHome = authMode === "codex-login"
+    ? normalizeOptionalAbsolutePath("WIKI_AGENT_CODEX_HOME", env.WIKI_AGENT_CODEX_HOME) ?? defaultWikiAgentCodexHome()
+    : null;
+  const model = env.WIKI_AGENT_MODEL?.trim() || DEFAULT_WIKI_AGENT_MODEL;
   const batchSize = parseNonNegativeInteger(env.WIKI_AGENT_BATCH_SIZE, 5, "WIKI_AGENT_BATCH_SIZE");
   const sandboxMode = parseWikiAgentSandboxMode(env.WIKI_AGENT_SANDBOX_MODE);
   const workflowTimeoutSeconds = parsePositiveInteger(
@@ -151,11 +194,8 @@ export function resolveAgentSettings(
   const missing: string[] = [];
 
   if (enabled) {
-    if (!apiKey) {
+    if (authMode === "api-key" && !apiKey) {
       missing.push("WIKI_AGENT_API_KEY");
-    }
-    if (!model) {
-      missing.push("WIKI_AGENT_MODEL");
     }
   }
 
@@ -168,8 +208,10 @@ export function resolveAgentSettings(
 
   return {
     enabled,
+    authMode,
     baseUrl,
     apiKey,
+    codexHome,
     model,
     batchSize,
     sandboxMode,

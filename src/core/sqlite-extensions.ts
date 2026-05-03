@@ -37,30 +37,39 @@ function getExistingFtsSql(db: Database.Database): string | null {
   return row?.sql ?? null;
 }
 
-function resolveBundledSimpleExtensionPath(packageRoot: string): string {
-  const byArch = SIMPLE_ASSET_MAP[process.platform];
+export function resolveBundledSimpleExtensionRelativePath(
+  platform: NodeJS.Platform = process.platform,
+  arch: NodeJS.Architecture = process.arch,
+): string {
+  const byArch = SIMPLE_ASSET_MAP[platform];
   if (!byArch) {
     throw new AppError(
-      `Bundled simple extension is not available for platform ${process.platform}-${process.arch}.`,
+      `Bundled simple extension is not available for platform ${platform}-${arch}.`,
       "config",
       {
-        platform: process.platform,
-        arch: process.arch,
+        platform,
+        arch,
       },
     );
   }
 
-  const relativePath = byArch[process.arch];
+  const relativePath = byArch[arch];
   if (!relativePath) {
     throw new AppError(
-      `Bundled simple extension is not available for platform ${process.platform}-${process.arch}.`,
+      `Bundled simple extension is not available for platform ${platform}-${arch}.`,
       "config",
       {
-        platform: process.platform,
-        arch: process.arch,
+        platform,
+        arch,
       },
     );
   }
+
+  return relativePath;
+}
+
+function resolveBundledSimpleExtensionPath(packageRoot: string): string {
+  const relativePath = resolveBundledSimpleExtensionRelativePath();
 
   const extensionPath = path.join(packageRoot, relativePath);
   if (!pathExistsSync(extensionPath)) {

@@ -59,7 +59,7 @@ describe("workflow artifacts", () => {
       artifacts.promptPath,
       artifacts.resultPath,
       artifacts.skillArtifactsPath,
-    ].map((entry) => entry.replace(`${artifacts.rootDir}/`, ""));
+    ].map((entry) => path.relative(artifacts.rootDir, entry));
 
     expect(relativeEntries).toEqual([
       "queue-item.json",
@@ -69,7 +69,9 @@ describe("workflow artifacts", () => {
     ]);
   });
 
-  it("creates a wiki wrapper that executes the packaged CLI entrypoint directly", () => {
+  const itIfPosix = process.platform === "win32" ? it.skip : it;
+
+  itIfPosix("creates a POSIX wiki wrapper that executes the packaged CLI entrypoint directly", () => {
     const workspace = createWorkspace();
     workspaces.push(workspace);
     const paths = resolveRuntimePaths(workspace.env);
@@ -105,5 +107,30 @@ describe("workflow artifacts", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain(`node exec:${path.join(paths.packageRoot, "dist", "index.js")} sync --path concepts/bayes-theorem.md`);
+  });
+
+  it("creates a Windows .cmd wiki wrapper for native Windows shells", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    const paths = {
+      ...resolveRuntimePaths(workspace.env),
+      packageRoot: path.join(workspace.root, "package%20root"),
+    };
+
+    const artifacts = ensureWorkflowArtifactSet(paths, {
+      queueItemId: "imports/spec.pdf",
+      queueItem: {
+        fileId: "imports/spec.pdf",
+        status: "pending",
+      },
+    });
+
+    const cmdWrapperPath = path.join(artifacts.skillArtifactsPath, "tiangong-wiki.cmd");
+    const cmdWrapper = readFile(cmdWrapperPath);
+
+    expect(cmdWrapper).toContain("@echo off");
+    expect(cmdWrapper).toContain("WIKI_CLI_NODE");
+    expect(cmdWrapper).toContain("WIKI_CLI_ENTRYPOINT");
+    expect(cmdWrapper).toContain(path.join(paths.packageRoot, "dist", "index.js").replace(/%/g, "%%"));
   });
 });

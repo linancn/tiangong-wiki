@@ -86,6 +86,8 @@ tiangong-wiki sync                                    # 索引 Markdown 文件
 
 这意味着命令仍然最适合在 workspace 内执行；但 setup 之后，即使在 workspace 外运行，也可以通过默认配置正常工作，或者通过 `--env-file` 显式指定目标工作区。
 
+如果启用自动 vault 处理，新的 setup 默认使用 `WIKI_AGENT_AUTH_MODE=codex-login`、当前用户 home 目录下的专用 Codex home 和 `WIKI_AGENT_MODEL=gpt-5.5`。启用前，macOS/Linux 执行 `CODEX_HOME="$HOME/.codex-tiangong-wiki" codex login`；Windows PowerShell 先设置 `$env:CODEX_HOME = "$env:USERPROFILE\.codex-tiangong-wiki"`，再执行 `codex login`。
+
 ```bash
 tiangong-wiki find --type concept --status active     # 结构化查询
 tiangong-wiki fts "贝叶斯"                             # 全文搜索

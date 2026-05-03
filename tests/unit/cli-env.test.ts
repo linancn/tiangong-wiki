@@ -4,7 +4,12 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { applyCliEnvironment, DEFAULT_WIKI_ENV_FILE } from "../../src/core/cli-env.js";
+import {
+  applyCliEnvironment,
+  DEFAULT_WIKI_ENV_FILE,
+  parseEnvFile,
+  serializeEnvEntries,
+} from "../../src/core/cli-env.js";
 import { resolveGlobalConfigPath } from "../../src/core/global-config.js";
 
 function createEnvFixture(contents: string): { root: string; cwd: string; envFilePath: string } {
@@ -174,5 +179,13 @@ describe("cli env loading", () => {
     expect(info.missingDefaultPath).toBe(true);
     expect(info.requestedPath).toBe(missingEnvPath);
     expect(info.globalConfigPath).toBe(globalConfigPath);
+  });
+
+  it("round-trips quoted Windows paths without treating escaped backslash-n as a newline", () => {
+    const windowsPath = String.raw`C:\new\wiki pages\pages`;
+    const serialized = serializeEnvEntries([["WIKI_PATH", windowsPath]]);
+
+    expect(serialized).toContain("WIKI_PATH=");
+    expect(parseEnvFile(serialized).WIKI_PATH).toBe(windowsPath);
   });
 });

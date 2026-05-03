@@ -445,6 +445,7 @@ function extractPdfText(filePath: string): string {
     const result = execFileSync("/usr/bin/mdls", ["-raw", "-name", "kMDItemTextContent", filePath], {
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
     const text = (result || "").trim();
     if (text && text !== "(null)") return text;
@@ -454,6 +455,7 @@ function extractPdfText(filePath: string): string {
     const result = execFileSync("/usr/bin/strings", ["-n", "6", filePath], {
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
     const lines = result.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 400);
     if (lines.length) return lines.join("\n");

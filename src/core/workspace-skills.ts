@@ -123,8 +123,8 @@ function canRead(filePath: string): boolean {
   return true;
 }
 
-function getNpxCommand(): string {
-  return process.platform === "win32" ? "npx.cmd" : "npx";
+export function getNpxCommand(platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? "npx.cmd" : "npx";
 }
 
 export function resolveWorkspaceRootFromWikiPath(wikiPath: string): string {
@@ -321,6 +321,10 @@ function replaceSkillDirectory(targetPath: string, sourcePath: string): void {
   copyDirectoryContentsSync(sourcePath, targetPath);
 }
 
+function linkWorkspaceSkill(sourcePath: string, targetPath: string): void {
+  symlinkSync(sourcePath, targetPath, process.platform === "win32" ? "junction" : "dir");
+}
+
 function createManagedSkillMetadata(
   descriptor: ManagedSkillDescriptor,
   baselineHash: string,
@@ -401,7 +405,7 @@ function createWikiDescriptor(wikiPath: string, packageRoot: string): ManagedSki
 
 function renderCommand(command: string, args: string[]): string {
   return [command, ...args]
-    .map((part) => (/[A-Za-z0-9_./:@+-]+/.test(part) ? part : JSON.stringify(part)))
+    .map((part) => (/^[A-Za-z0-9_./:@+-]+$/.test(part) ? part : JSON.stringify(part)))
     .join(" ");
 }
 
@@ -416,6 +420,24 @@ export function buildExternalSkillInstallInvocation(source: string, skillName: s
     command,
     args,
     rendered: renderCommand(command, args),
+  };
+}
+
+export function buildExternalSkillInstallSpawnInvocation(
+  invocation: { command: string; args: string[] },
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): { command: string; args: string[] } {
+  if (platform !== "win32") {
+    return {
+      command: invocation.command,
+      args: invocation.args,
+    };
+  }
+
+  return {
+    command: env.ComSpec?.trim() || "cmd.exe",
+    args: ["/d", "/c", "call", invocation.command, ...invocation.args],
   };
 }
 
@@ -447,10 +469,12 @@ function installManagedExternalSkill(
 
   const workspaceRoot = getWorkspaceRootForSkillPath(descriptor.skillPath);
   options.output?.write(`Installing skill ${descriptor.name} from ${descriptor.source}...\n`);
-  const result = spawnSync(invocation.command, invocation.args, {
+  const spawnInvocation = buildExternalSkillInstallSpawnInvocation(invocation);
+  const result = spawnSync(spawnInvocation.command, spawnInvocation.args, {
     cwd: workspaceRoot,
     env: options.env ?? process.env,
     encoding: "utf8",
+    windowsHide: true,
   });
 
   if (result.error) {
@@ -899,7 +923,7 @@ export function ensureWikiSkillInstall(
       }
 
       unlinkSync(paths.wikiSkillPath);
-      symlinkSync(packageRoot, paths.wikiSkillPath, "dir");
+      linkWorkspaceSkill(packageRoot, paths.wikiSkillPath);
       return {
         sourcePath: packageRoot,
         skillPath: paths.wikiSkillPath,
@@ -909,7 +933,7 @@ export function ensureWikiSkillInstall(
 
     if (existing.readable) {
       rmSync(paths.wikiSkillPath, { recursive: true, force: true });
-      symlinkSync(packageRoot, paths.wikiSkillPath, "dir");
+      linkWorkspaceSkill(packageRoot, paths.wikiSkillPath);
       return {
         sourcePath: packageRoot,
         skillPath: paths.wikiSkillPath,
@@ -927,7 +951,7 @@ export function ensureWikiSkillInstall(
     );
   }
 
-  symlinkSync(packageRoot, paths.wikiSkillPath, "dir");
+  linkWorkspaceSkill(packageRoot, paths.wikiSkillPath);
   return {
     sourcePath: packageRoot,
     skillPath: paths.wikiSkillPath,

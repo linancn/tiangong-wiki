@@ -1,6 +1,9 @@
 import path from "node:path";
+import { mkdirSync } from "node:fs";
+import childProcess, { type SpawnOptions } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 
-import { Codex, type CodexOptions, type Thread } from "@openai/codex-sdk";
+import type { Codex, CodexOptions, Thread } from "@openai/codex-sdk";
 
 import { readWorkflowResult, type WorkflowResultManifest } from "./workflow-result.js";
 import { resolveAgentSettings } from "./paths.js";
@@ -9,6 +12,63 @@ import { AppError } from "../utils/errors.js";
 import type { WikiAgentSandboxMode } from "../types/page.js";
 
 export const CODEX_WORKFLOW_VERSION = "2026-04-07";
+
+const hiddenWindowsSpawnPatch = Symbol.for("tiangong-wiki.hiddenWindowsSpawnPatch");
+
+type SpawnWithPatchMarker = typeof childProcess.spawn & {
+  [hiddenWindowsSpawnPatch]?: true;
+};
+
+function isSpawnOptions(value: unknown): value is SpawnOptions {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function addHiddenWindowDefault(options: unknown): SpawnOptions {
+  if (!isSpawnOptions(options)) {
+    return { windowsHide: true };
+  }
+  return { ...options, windowsHide: options.windowsHide ?? true };
+}
+
+export function createHiddenWindowsSpawn(spawnFn: typeof childProcess.spawn): typeof childProcess.spawn {
+  return ((command: unknown, argsOrOptions?: unknown, options?: unknown) => {
+    if (Array.isArray(argsOrOptions)) {
+      return spawnFn(command as never, argsOrOptions as never, addHiddenWindowDefault(options) as never);
+    }
+    if (isSpawnOptions(argsOrOptions) && options === undefined) {
+      return spawnFn(command as never, addHiddenWindowDefault(argsOrOptions) as never);
+    }
+    if (argsOrOptions === undefined && options === undefined) {
+      return spawnFn(command as never, addHiddenWindowDefault(undefined) as never);
+    }
+    return spawnFn(command as never, argsOrOptions as never, addHiddenWindowDefault(options) as never);
+  }) as typeof childProcess.spawn;
+}
+
+function installHiddenWindowsSpawnPatch(platform: NodeJS.Platform = process.platform): void {
+  if (platform !== "win32") {
+    return;
+  }
+  const currentSpawn = childProcess.spawn as SpawnWithPatchMarker;
+  if (currentSpawn[hiddenWindowsSpawnPatch]) {
+    return;
+  }
+
+  const patchedSpawn = createHiddenWindowsSpawn(childProcess.spawn) as SpawnWithPatchMarker;
+  patchedSpawn[hiddenWindowsSpawnPatch] = true;
+  childProcess.spawn = patchedSpawn;
+  syncBuiltinESMExports();
+}
+
+let codexSdkModulePromise: Promise<typeof import("@openai/codex-sdk")> | null = null;
+
+async function loadCodexSdk(): Promise<typeof import("@openai/codex-sdk")> {
+  // The SDK captures child_process.spawn during module import and currently
+  // does not expose windowsHide; install the Windows default before loading it.
+  installHiddenWindowsSpawnPatch();
+  codexSdkModulePromise ??= import("@openai/codex-sdk");
+  return codexSdkModulePromise;
+}
 
 export interface CodexWorkflowInput {
   queueItemId: string;
@@ -42,24 +102,38 @@ interface CodexSdkWorkflowRunnerOptions {
 }
 
 function normalizeEnv(input: CodexWorkflowInput): Record<string, string> {
+  const agentSettings = resolveAgentSettings(input.env);
+  if (agentSettings.authMode === "codex-login" && agentSettings.codexHome) {
+    mkdirSync(agentSettings.codexHome, { recursive: true });
+  }
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries({
     ...process.env,
     ...input.env,
-    ...(input.env?.WIKI_AGENT_API_KEY && !input.env.OPENAI_API_KEY ? { OPENAI_API_KEY: input.env.WIKI_AGENT_API_KEY } : {}),
+    ...(agentSettings.authMode === "api-key" && agentSettings.apiKey && !input.env?.OPENAI_API_KEY
+      ? { OPENAI_API_KEY: agentSettings.apiKey }
+      : {}),
+    ...(agentSettings.authMode === "codex-login" && agentSettings.codexHome
+      ? { CODEX_HOME: agentSettings.codexHome }
+      : {}),
   })) {
     if (typeof value === "string") {
       normalized[key] = value;
     }
   }
+  if (agentSettings.authMode === "codex-login") {
+    delete normalized.OPENAI_API_KEY;
+    delete normalized.CODEX_API_KEY;
+  }
   normalized.PATH = [input.skillArtifactsPath, normalized.PATH].filter(Boolean).join(path.delimiter);
   return normalized;
 }
 
-function createCodexClient(input: CodexWorkflowInput): Codex {
+async function createCodexClient(input: CodexWorkflowInput): Promise<Codex> {
+  const agentSettings = resolveAgentSettings(input.env);
   const env = normalizeEnv(input);
-  const baseUrl = input.env?.WIKI_AGENT_BASE_URL?.trim();
-  const apiKey = input.env?.WIKI_AGENT_API_KEY?.trim();
+  const baseUrl = agentSettings.authMode === "api-key" ? agentSettings.baseUrl : null;
+  const apiKey = agentSettings.authMode === "api-key" ? agentSettings.apiKey : null;
 
   const options: CodexOptions = {
     apiKey: apiKey || undefined,
@@ -83,6 +157,7 @@ function createCodexClient(input: CodexWorkflowInput): Codex {
     };
   }
 
+  const { Codex } = await loadCodexSdk();
   return new Codex(options);
 }
 
@@ -170,7 +245,7 @@ export class CodexSdkWorkflowRunner implements CodexWorkflowRunner {
   // must not automatically resume real workflow threads inline.
 
   async startWorkflow(input: CodexWorkflowInput): Promise<CodexWorkflowHandle> {
-    const codex = createCodexClient(input);
+    const codex = await createCodexClient(input);
     const thread = codex.startThread({
       model: input.model ?? undefined,
       modelReasoningEffort: "low",
@@ -187,7 +262,7 @@ export class CodexSdkWorkflowRunner implements CodexWorkflowRunner {
   }
 
   async resumeWorkflow(threadId: string, input: CodexWorkflowInput): Promise<CodexWorkflowHandle> {
-    const codex = createCodexClient(input);
+    const codex = await createCodexClient(input);
     const thread = codex.resumeThread(threadId, {
       model: input.model ?? undefined,
       modelReasoningEffort: "low",
