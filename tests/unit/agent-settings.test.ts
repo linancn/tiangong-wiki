@@ -41,7 +41,7 @@ describe("agent settings", () => {
     );
 
     expect(codexLogin.apiKey).toBeNull();
-    expect(codexLogin.codexHome).toBe(path.join(os.homedir(), ".codex-tiangong-wiki"));
+    expect(codexLogin.codexHome).toBe(path.join(os.homedir(), ".codex"));
     expect(codexLogin.missing).toEqual([]);
   });
 
@@ -57,6 +57,6 @@ describe("agent settings", () => {
     expect(parsed.WIKI_AGENT_CODEX_HOME).toBeUndefined();
     expect(parsed.WIKI_AGENT_API_KEY).toBeUndefined();
     expect(settings.authMode).toBe("codex-login");
-    expect(settings.codexHome).toBe(path.join(os.homedir(), ".codex-tiangong-wiki"));
+    expect(settings.codexHome).toBe(path.join(os.homedir(), ".codex"));
   });
 });

@@ -4,8 +4,9 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { scaffoldWorkspaceAssets } from "../../src/core/workspace-bootstrap.js";
 import { parseEnvFile } from "../../src/core/cli-env.js";
-import { cleanupWorkspace, createWorkspace, readFile, readJson, runCli, startSynologyServer } from "../helpers.js";
+import { cleanupWorkspace, createWorkspace, projectRoot, readFile, readJson, runCli, startSynologyServer } from "../helpers.js";
 
 function stripWikiEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const next = { ...env };
@@ -78,6 +79,28 @@ function createFakeSkillsInstaller(workspaceRoot: string, mode: "success" | "fai
   );
   chmodSync(installerPath, 0o755);
   return binDir;
+}
+
+function scaffoldDoctorWorkspace(workspace: ReturnType<typeof createWorkspace>): {
+  configPath: string;
+  templatesPath: string;
+} {
+  const configPath = path.join(workspace.wikiRoot, "wiki.config.json");
+  const templatesPath = path.join(workspace.wikiRoot, "templates");
+  scaffoldWorkspaceAssets({
+    packageRoot: projectRoot(),
+    wikiRoot: workspace.wikiRoot,
+    wikiPath: workspace.wikiPath,
+    vaultPath: workspace.vaultPath,
+    configPath,
+    templatesPath,
+  });
+
+  const skillPath = path.join(workspace.root, ".agents", "skills", "tiangong-wiki-skill");
+  mkdirSync(skillPath, { recursive: true });
+  writeFileSync(path.join(skillPath, "SKILL.md"), "---\nname: tiangong-wiki-skill\ndescription: test\n---\n", "utf8");
+
+  return { configPath, templatesPath };
 }
 
 describe("setup and doctor integration", () => {
@@ -314,10 +337,117 @@ describe("setup and doctor integration", () => {
     const parsedEnvFile = parseEnvFile(envFile);
     expect(envFile).toContain("WIKI_AGENT_ENABLED=true");
     expect(envFile).toContain("WIKI_AGENT_AUTH_MODE=codex-login");
-    expect(parsedEnvFile.WIKI_AGENT_CODEX_HOME).toBe(path.join(os.homedir(), ".codex-tiangong-wiki"));
+    expect(parsedEnvFile.WIKI_AGENT_CODEX_HOME).toBe(path.join(os.homedir(), ".codex"));
     expect(envFile).not.toContain("WIKI_AGENT_API_KEY=");
     expect(envFile).toContain("WIKI_AGENT_MODEL=gpt-5.5");
     expect(envFile).toContain("WIKI_AGENT_SANDBOX_MODE=danger-full-access");
+  });
+
+  it("reports codex-login auth problems in doctor and check-config", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    const { configPath, templatesPath } = scaffoldDoctorWorkspace(workspace);
+    const codexHome = path.join(workspace.root, "missing-codex-home");
+    const env = {
+      ...stripWikiEnv(workspace.env),
+      WIKI_PATH: workspace.wikiPath,
+      VAULT_PATH: workspace.vaultPath,
+      WIKI_CONFIG_PATH: configPath,
+      WIKI_TEMPLATES_PATH: templatesPath,
+      WIKI_AGENT_ENABLED: "true",
+      WIKI_AGENT_AUTH_MODE: "codex-login",
+      WIKI_AGENT_CODEX_HOME: codexHome,
+    };
+
+    const doctor = runCli(["doctor", "--format", "json"], env, {
+      cwd: workspace.root,
+      allowFailure: true,
+    });
+    expect(doctor.status).toBe(2);
+    const report = readJson<{
+      checks: Array<{ id: string; severity: string; summary: string; recommendation?: string }>;
+    }>(doctor.stdout);
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "agent",
+          severity: "error",
+          summary: expect.stringContaining("WIKI_AGENT_CODEX_HOME does not exist"),
+          recommendation: expect.stringContaining(`CODEX_HOME=${codexHome} codex login`),
+        }),
+      ]),
+    );
+
+    const checkConfig = runCli(["check-config"], env, {
+      cwd: workspace.root,
+      allowFailure: true,
+    });
+    expect(checkConfig.status).toBe(2);
+    const checkError = readJson<{ error: string }>(checkConfig.stderr);
+    expect(checkError.error).toContain("WIKI_AGENT_CODEX_HOME does not exist");
+    expect(checkError.error).toContain(`CODEX_HOME=${codexHome} codex login`);
+  });
+
+  it("accepts codex-login when WIKI_AGENT_CODEX_HOME contains auth.json", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    const { configPath, templatesPath } = scaffoldDoctorWorkspace(workspace);
+    const codexHome = path.join(workspace.root, ".codex");
+    mkdirSync(codexHome, { recursive: true });
+    writeFileSync(path.join(codexHome, "auth.json"), "{}\n", "utf8");
+    const env = {
+      ...stripWikiEnv(workspace.env),
+      WIKI_PATH: workspace.wikiPath,
+      VAULT_PATH: workspace.vaultPath,
+      WIKI_CONFIG_PATH: configPath,
+      WIKI_TEMPLATES_PATH: templatesPath,
+      WIKI_AGENT_ENABLED: "true",
+      WIKI_AGENT_AUTH_MODE: "codex-login",
+      WIKI_AGENT_CODEX_HOME: codexHome,
+    };
+
+    const doctor = runCli(["doctor", "--format", "json"], env, { cwd: workspace.root });
+    expect(doctor.status).toBe(0);
+    const report = readJson<{
+      checks: Array<{ id: string; severity: string; summary: string }>;
+    }>(doctor.stdout);
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "agent",
+          severity: "ok",
+          summary: expect.stringContaining(`Codex login at ${codexHome}`),
+        }),
+      ]),
+    );
+
+    const checkConfig = runCli(["check-config"], env, { cwd: workspace.root });
+    expect(checkConfig.status).toBe(0);
+    expect(checkConfig.stdout).toContain("agentCodexLoginReady: true");
+    expect(checkConfig.stdout).toContain(`agentCodexLoginAuthJson: ${path.join(codexHome, "auth.json")}`);
+  });
+
+  it("redacts agent API keys from check-config JSON output", () => {
+    const workspace = createWorkspace();
+    workspaces.push(workspace);
+    const { configPath, templatesPath } = scaffoldDoctorWorkspace(workspace);
+    const env = {
+      ...stripWikiEnv(workspace.env),
+      WIKI_PATH: workspace.wikiPath,
+      VAULT_PATH: workspace.vaultPath,
+      WIKI_CONFIG_PATH: configPath,
+      WIKI_TEMPLATES_PATH: templatesPath,
+      WIKI_AGENT_ENABLED: "true",
+      WIKI_AGENT_AUTH_MODE: "api-key",
+      WIKI_AGENT_API_KEY: "secret-agent-key",
+    };
+
+    const checkConfig = runCli(["check-config", "--format", "json"], env, { cwd: workspace.root });
+    expect(checkConfig.status).toBe(0);
+    expect(checkConfig.stdout).not.toContain("secret-agent-key");
+    const payload = readJson<{ agentProcessing: { apiKey: string | null; authMode: string } }>(checkConfig.stdout);
+    expect(payload.agentProcessing.authMode).toBe("api-key");
+    expect(payload.agentProcessing.apiKey).toBe("<redacted>");
   });
 
   it("reports actionable errors when the generated runtime assets are missing", () => {

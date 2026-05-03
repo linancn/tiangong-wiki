@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import path from "node:path";
 
+import { inspectWikiAgentCodexLogin } from "../core/agent-auth.js";
 import { loadRuntimeConfig } from "../core/runtime.js";
 import { EmbeddingClient } from "../core/embedding.js";
 import { getWikiAgentStatus } from "../core/vault-processing.js";
@@ -26,6 +27,20 @@ export function registerCheckConfigCommand(program: Command): void {
           "config",
         );
       }
+      const agentCodexLogin = inspectWikiAgentCodexLogin(wikiAgent);
+      if (!agentCodexLogin.ready) {
+        throw new AppError(
+          [
+            agentCodexLogin.summary,
+            agentCodexLogin.recommendation,
+          ].filter(Boolean).join(" "),
+          "config",
+        );
+      }
+      const safeWikiAgent = {
+        ...wikiAgent,
+        apiKey: wikiAgent.apiKey ? "<redacted>" : null,
+      };
       const templateChecks = Object.keys(config.templates).map((pageType) => {
         const templatePath = resolveTemplateFilePath(config, paths.wikiRoot, pageType);
         return {
@@ -51,7 +66,8 @@ export function registerCheckConfigCommand(program: Command): void {
         templatesPath: paths.templatesPath,
         configVersion: config.configVersion,
         embeddingConfigured: embeddingClient !== null,
-        agentProcessing: wikiAgent,
+        agentProcessing: safeWikiAgent,
+        agentCodexLogin,
         probe,
         templateChecks,
       };
@@ -80,6 +96,8 @@ export function registerCheckConfigCommand(program: Command): void {
             agentBatchSize: wikiAgent.batchSize,
             agentWorkflowTimeoutSeconds: wikiAgent.workflowTimeoutSeconds,
             agentMissing: wikiAgent.missing.join(", "),
+            agentCodexLoginReady: agentCodexLogin.checked ? agentCodexLogin.ready : "",
+            agentCodexLoginAuthJson: agentCodexLogin.authJsonPath ?? "",
             probe,
           }),
           "",

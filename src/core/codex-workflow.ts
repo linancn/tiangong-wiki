@@ -1,5 +1,4 @@
 import path from "node:path";
-import { mkdirSync } from "node:fs";
 import childProcess, { type SpawnOptions } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 
@@ -103,9 +102,6 @@ interface CodexSdkWorkflowRunnerOptions {
 
 function normalizeEnv(input: CodexWorkflowInput): Record<string, string> {
   const agentSettings = resolveAgentSettings(input.env);
-  if (agentSettings.authMode === "codex-login" && agentSettings.codexHome) {
-    mkdirSync(agentSettings.codexHome, { recursive: true });
-  }
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries({
     ...process.env,

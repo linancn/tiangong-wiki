@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { confirm, input, password, select } from "@inquirer/prompts";
 
+import { inspectWikiAgentCodexLogin } from "./agent-auth.js";
 import { DEFAULT_WIKI_ENV_FILE, getCliEnvironmentInfo, parseEnvFile, serializeEnvEntries } from "./cli-env.js";
 import { resolveTemplateFilePath, loadConfig } from "./config.js";
 import { DEFAULT_EMBEDDING_DIMENSIONS, EmbeddingClient } from "./embedding.js";
@@ -792,7 +793,7 @@ async function collectAgentSettings(
       {
         value: "codex-login",
         label: "codex-login",
-        description: "Use a local Codex ChatGPT login stored under WIKI_AGENT_CODEX_HOME.",
+        description: "Use the current user's Codex login by default (~/.codex); set WIKI_AGENT_CODEX_HOME for isolation.",
       },
       {
         value: "api-key",
@@ -1185,6 +1186,11 @@ export async function runSetupWizard(
         `- Example: cd ${JSON.stringify(workspaceRoot)} && tiangong-wiki init`,
         "- Run `tiangong-wiki doctor` to validate the generated configuration.",
         "- Run `tiangong-wiki init` to create index.db and perform the first sync.",
+        ...(values.agentEnabled && values.agentAuthMode === "codex-login" && values.agentCodexHome
+          ? [
+              `- Codex login auth uses ${values.agentCodexHome}; if needed, run \`CODEX_HOME=${values.agentCodexHome} codex login\` before starting the daemon.`,
+            ]
+          : []),
         ...(values.vaultSource === "synology"
           ? ["- Protect `.wiki.env` carefully because it now stores Synology credentials."]
           : []),
@@ -1528,6 +1534,20 @@ function inspectAgent(checks: DoctorCheck[], env: NodeJS.ProcessEnv): void {
         "Set the missing WIKI_AGENT_* values in `.wiki.env` or rerun `tiangong-wiki setup`.",
       );
       return;
+    }
+
+    if (settings.authMode === "codex-login") {
+      const codexLogin = inspectWikiAgentCodexLogin(settings);
+      if (!codexLogin.ready) {
+        collectDoctorCheck(
+          checks,
+          "error",
+          "agent",
+          codexLogin.summary,
+          codexLogin.recommendation,
+        );
+        return;
+      }
     }
 
     collectDoctorCheck(

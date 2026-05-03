@@ -122,7 +122,7 @@ function normalizeOptionalAbsolutePath(label: string, rawValue: string | undefin
 }
 
 export function defaultWikiAgentCodexHome(): string {
-  return path.join(os.homedir(), ".codex-tiangong-wiki");
+  return path.join(os.homedir(), ".codex");
 }
 
 export function parseVaultHashMode(raw: string | undefined): "content" | "mtime" {

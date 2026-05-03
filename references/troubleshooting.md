@@ -85,7 +85,7 @@ The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to p
 | --- | --- | --- |
 | `WIKI_AGENT_ENABLED` | No | Enable agentic workflow (`true` / `false`, default: `false`) |
 | `WIKI_AGENT_AUTH_MODE` | No | Auth mode: `api-key` or `codex-login`. Runtime default is `api-key` for backwards compatibility; `tiangong-wiki setup` defaults new agent configs to `codex-login` |
-| `WIKI_AGENT_CODEX_HOME` | No | Dedicated Codex home directory. Leave unset to use the current user's default `${HOME}/.codex-tiangong-wiki`; if set in `.wiki.env`, use a real absolute path because shell variables are not expanded there |
+| `WIKI_AGENT_CODEX_HOME` | No | Codex home directory. Leave unset to use the current user's standard `${HOME}/.codex` (or the user profile `.codex` directory on Windows); if set in `.wiki.env`, use a real absolute path because shell variables are not expanded there |
 | `WIKI_AGENT_BASE_URL` | No | LLM API base URL for `api-key` mode (e.g. `https://api.openai.com/v1`). When set, overrides global Codex config |
 | `WIKI_AGENT_API_KEY` | In `api-key` mode | API key for the LLM provider |
 | `WIKI_AGENT_MODEL` | No | Model name (default: `gpt-5.5`; e.g. `Qwen/Qwen3.5-397B-A17B-GPTQ-Int4`) |
@@ -94,6 +94,8 @@ The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to p
 | `WIKI_PARSER_SKILLS` | No | Comma-separated parser skill list (e.g. `pdf,docx,pptx,xlsx`) |
 
 `tiangong-wiki setup` now prompts for `WIKI_AGENT_SANDBOX_MODE` when automatic vault processing is enabled. The default is `danger-full-access`, and the setup wizard highlights that this mode grants full runtime access.
+
+When `WIKI_AGENT_ENABLED=true` and `WIKI_AGENT_AUTH_MODE=codex-login`, `tiangong-wiki doctor` and `tiangong-wiki check-config` verify that `WIKI_AGENT_CODEX_HOME` exists and contains `auth.json`. They report the path and remediation command, but never print token or auth file contents.
 
 Queue items that fail workflow execution are auto-retried up to 3 times. After that they remain in `error` until you manually retry them from the dashboard / queue tooling, or a later vault sync requeues the file because the source changed.
 
@@ -148,7 +150,23 @@ If the agent workflow fails with `bwrap`, `unshare`, `uid_map`, or similar sandb
 
 ### Codex login (recommended local setup)
 
-Create and log in to a dedicated Codex home for the wiki service:
+By default, use the current user's standard Codex home:
+
+macOS/Linux:
+
+```bash
+codex login
+codex login status
+```
+
+Windows PowerShell:
+
+```powershell
+codex login
+codex login status
+```
+
+For an isolated Codex home, set `WIKI_AGENT_CODEX_HOME` to an absolute path and log in there first:
 
 macOS/Linux:
 
@@ -172,7 +190,7 @@ Then configure the wiki agent:
 ```env
 WIKI_AGENT_ENABLED=true
 WIKI_AGENT_AUTH_MODE=codex-login
-# Optional. Leave unset to use the current user's default dedicated Codex home.
+# Optional. Leave unset to use the current user's standard ~/.codex.
 # WIKI_AGENT_CODEX_HOME=/absolute/path/to/.codex-tiangong-wiki
 WIKI_AGENT_MODEL=gpt-5.5
 ```
