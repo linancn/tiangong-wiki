@@ -28,6 +28,9 @@ describe("workflow prompt shape", () => {
     expect(prompt).toContain("## Environment");
     expect(prompt).toContain("Workspace-local skills are available from WORKSPACE_ROOT");
     expect(prompt).toContain("On Windows native shells, use `tiangong-wiki.cmd`");
+    expect(prompt).toContain("WIKI_PARSER_SKILLS` includes `document-granular-decompose");
+    expect(prompt).toContain("request `return_txt=true`");
+    expect(prompt).toContain("pure text extracted from `response.txt`/`txt`");
     expect(prompt).toContain("tiangong-wiki type list");
     expect(prompt).toContain("tiangong-wiki template show <type>");
     expect(prompt).toContain("tiangong-wiki page-info <pageId>");

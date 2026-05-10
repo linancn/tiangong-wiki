@@ -111,6 +111,8 @@ export function buildVaultWorkflowPrompt(input: VaultWorkflowPromptInput): strin
     "",
     "1. Read queue-item.json next to RESULT_JSON_PATH.",
     "2. Read the target vault file at VAULT_FILE_PATH. Refer to `references/vault-to-wiki-instruction.md` (Phase 1) in the wiki package for file-type-specific reading strategies, parser skill discovery, image handling, and metadata utilization.",
+    "   - If `WIKI_PARSER_SKILLS` includes `document-granular-decompose` and `UNSTRUCTURED_API_BASE_URL` plus `UNSTRUCTURED_AUTH_TOKEN` are set, prefer that skill for supported document/image formats before the legacy type-specific parser skills.",
+    "   - When using `document-granular-decompose`, request `return_txt=true`, treat the pure text extracted from `response.txt`/`txt` as the main input, and keep raw JSON only for debugging or page-number evidence.",
     "3. Discover the current page type ontology via `tiangong-wiki type list` and `tiangong-wiki type show <type>`. Do not assume any type, template, or default target type.",
     "4. Search the existing wiki for overlapping or related content:",
     "   - Use `tiangong-wiki fts` and `tiangong-wiki search` with key terms from the source.",

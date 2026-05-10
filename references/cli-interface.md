@@ -249,7 +249,7 @@ tiangong-wiki skill update [name] [--all] [--force] [--format text|json]
 ```
 
 - `add` — Install a skill from any repo URL or local path via the external `npx skills add <source> --skill <name> -a codex -y` flow, then start tracking it as a managed workspace-local skill
-- `status` — Inspect managed workspace-local skills such as `tiangong-wiki-skill`, parser skills declared in `WIKI_PARSER_SKILLS`, and repo/path-sourced skills previously added via `skill add`
+- `status` — Inspect managed workspace-local skills such as `tiangong-wiki-skill`, parser skills declared in `WIKI_PARSER_SKILLS` (including `document-granular-decompose`), and repo/path-sourced skills previously added via `skill add`
 - `update` — Install missing managed skills, refresh skills that have newer source content, and refuse to overwrite local conflicts unless `--force` is passed
 
 The command distinguishes at least four states:

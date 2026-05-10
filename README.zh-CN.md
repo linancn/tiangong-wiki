@@ -117,6 +117,8 @@ tiangong-wiki dashboard                               # 在浏览器中打开仪
 
 > 环境变量通过 `.wiki.env` 管理（由 `tiangong-wiki setup` 创建）。CLI 会优先使用最近的本地 `.wiki.env`，找不到时再 fallback 到全局默认工作区配置。完整参考见 [references/troubleshooting.md](./references/troubleshooting.md)。如需部署中心化服务（Linux + `systemd` + Nginx），见 [references/centralized-service-deployment.md](./references/centralized-service-deployment.md)。该部署文档现在也包含了 Git 仓库初始化、GitHub remote 配置和 daemon 自动 push 的 Git 配置说明。
 
+如果 vault 里以文档解析为主，可设置 `WIKI_PARSER_SKILLS=document-granular-decompose`，并配置 `UNSTRUCTURED_API_BASE_URL` 与 `UNSTRUCTURED_AUTH_TOKEN`，让 workflow 优先使用 TianGong Unstructure parser。wiki workflow 会使用 `return_txt=true`，并把返回的纯 `txt` 文本作为 agent 主输入；`UNSTRUCTURED_PROVIDER` 和 `UNSTRUCTURED_MODEL` 只是可选覆盖项。
+
 ## MCP Server
 
 Tiangong Wiki 提供了独立的 MCP 适配层，通过 HTTP 调用 daemon。它使用的是 MCP 的 Streamable HTTP 传输，不是 stdio。

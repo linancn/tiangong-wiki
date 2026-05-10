@@ -91,7 +91,11 @@ The agent uses [Codex SDK](https://www.npmjs.com/package/@openai/codex-sdk) to p
 | `WIKI_AGENT_MODEL` | No | Model name (default: `gpt-5.5`; e.g. `Qwen/Qwen3.5-397B-A17B-GPTQ-Int4`) |
 | `WIKI_AGENT_BATCH_SIZE` | No | Max concurrent vault queue workers per cycle (default: `5`) |
 | `WIKI_AGENT_SANDBOX_MODE` | No | Codex sandbox mode: `danger-full-access` (default) or `workspace-write` |
-| `WIKI_PARSER_SKILLS` | No | Comma-separated parser skill list (e.g. `pdf,docx,pptx,xlsx`) |
+| `WIKI_PARSER_SKILLS` | No | Comma-separated parser skill list (e.g. `pdf,docx,pptx,xlsx,document-granular-decompose`) |
+| `UNSTRUCTURED_API_BASE_URL` | For `document-granular-decompose` | TianGong Unstructure API base URL |
+| `UNSTRUCTURED_AUTH_TOKEN` | For `document-granular-decompose` | Bearer token for TianGong Unstructure |
+| `UNSTRUCTURED_PROVIDER` | No | Optional provider override passed to TianGong Unstructure |
+| `UNSTRUCTURED_MODEL` | No | Optional model override passed to TianGong Unstructure |
 
 `tiangong-wiki setup` now prompts for `WIKI_AGENT_SANDBOX_MODE` when automatic vault processing is enabled. The default is `danger-full-access`, and the setup wizard highlights that this mode grants full runtime access.
 

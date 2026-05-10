@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildExternalSkillInstallInvocation,
   buildExternalSkillInstallSpawnInvocation,
+  buildParserSkillInstallInvocation,
   ensureWikiSkillInstall,
   getNpxCommand,
   installParserSkill,
@@ -25,6 +26,7 @@ describe("workspace skills", () => {
 
   it("parses parser skills and rejects unknown names in strict mode", () => {
     expect(parseParserSkills("pdf, docx,pdf")).toEqual(["pdf", "docx"]);
+    expect(parseParserSkills("document-granular-decompose")).toEqual(["document-granular-decompose"]);
     expect(parseParserSkills("", { strict: false })).toEqual([]);
     expect(() => parseParserSkills("pdf,unknown")).toThrow(/unsupported skills/i);
   });
@@ -35,6 +37,9 @@ describe("workspace skills", () => {
     expect(getNpxCommand("linux")).toBe("npx");
     expect(buildExternalSkillInstallInvocation("repo", "pdf").args).toContain("--skill");
     expect(buildExternalSkillInstallInvocation("custom skill source", "pdf").rendered).toContain('"custom skill source"');
+    expect(buildParserSkillInstallInvocation("document-granular-decompose").rendered).toContain(
+      "https://github.com/tiangong-ai/skills",
+    );
 
     const invocation = {
       ...buildExternalSkillInstallInvocation("custom skill source", "pdf"),

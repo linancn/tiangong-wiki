@@ -21,13 +21,19 @@ import { resolveRuntimePaths } from "./paths.js";
 import { toOffsetIso } from "../utils/time.js";
 
 export const PARSER_SKILL_SOURCE = "https://github.com/anthropics/skills";
+export const TIANGONG_PARSER_SKILL_SOURCE = "https://github.com/tiangong-ai/skills";
 export const MANAGED_SKILL_STATE_FILE = ".tiangong-wiki-skill.json";
 
 export const OPTIONAL_PARSER_SKILLS = [
-  { name: "pdf", summary: "Process PDF files" },
-  { name: "docx", summary: "Process DOCX files" },
-  { name: "pptx", summary: "Process PPTX files" },
-  { name: "xlsx", summary: "Process XLSX/CSV files" },
+  { name: "pdf", summary: "Process PDF files", source: PARSER_SKILL_SOURCE },
+  { name: "docx", summary: "Process DOCX files", source: PARSER_SKILL_SOURCE },
+  { name: "pptx", summary: "Process PPTX files", source: PARSER_SKILL_SOURCE },
+  { name: "xlsx", summary: "Process XLSX/CSV files", source: PARSER_SKILL_SOURCE },
+  {
+    name: "document-granular-decompose",
+    summary: "Process documents through TianGong Unstructure and return plain fulltext",
+    source: TIANGONG_PARSER_SKILL_SOURCE,
+  },
 ] as const;
 
 export type ParserSkillName = (typeof OPTIONAL_PARSER_SKILLS)[number]["name"];
@@ -112,6 +118,9 @@ export interface ManagedSkillUpdateResult extends ManagedSkillStatus {
 }
 
 const OPTIONAL_PARSER_SKILL_NAMES = new Set<ParserSkillName>(OPTIONAL_PARSER_SKILLS.map((skill) => skill.name));
+const OPTIONAL_PARSER_SKILL_BY_NAME = new Map<ParserSkillName, (typeof OPTIONAL_PARSER_SKILLS)[number]>(
+  OPTIONAL_PARSER_SKILLS.map((skill) => [skill.name, skill]),
+);
 const MANAGED_SKILL_SOURCE_KINDS = new Set<ManagedSkillSourceKind>([
   "workspace-package",
   "curated-parser",
@@ -372,11 +381,16 @@ function normalizeManagedSource(rawSource: string): string {
 }
 
 function createParserDescriptor(workspaceRoot: string, name: ParserSkillName, configured: boolean): ManagedSkillDescriptor {
+  const definition = OPTIONAL_PARSER_SKILL_BY_NAME.get(name);
+  if (!definition) {
+    throw new AppError(`Unsupported parser skill: ${name}`, "config");
+  }
+
   return {
     name,
     sourceKind: "curated-parser",
     configured,
-    source: PARSER_SKILL_SOURCE,
+    source: definition.source,
     skillPath: resolveWorkspaceSkillPath(workspaceRoot, name),
   };
 }
@@ -964,7 +978,11 @@ export function buildParserSkillInstallInvocation(skillName: ParserSkillName): {
   args: string[];
   rendered: string;
 } {
-  return buildExternalSkillInstallInvocation(PARSER_SKILL_SOURCE, skillName);
+  const definition = OPTIONAL_PARSER_SKILL_BY_NAME.get(skillName);
+  if (!definition) {
+    throw new AppError(`Unsupported parser skill: ${skillName}`, "config");
+  }
+  return buildExternalSkillInstallInvocation(definition.source, skillName);
 }
 
 export function installParserSkill(

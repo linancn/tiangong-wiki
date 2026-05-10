@@ -141,6 +141,7 @@ describe("setup and doctor integration", () => {
       "n",
       "n",
       "n",
+      "n",
       "y",
       "",
     ].join("\n");
@@ -254,6 +255,7 @@ describe("setup and doctor integration", () => {
       "n",
       "n",
       "n",
+      "n",
       "",
     ].join("\n");
 
@@ -317,6 +319,7 @@ describe("setup and doctor integration", () => {
       "",
       "",
       "",
+      "n",
       "n",
       "n",
       "n",
@@ -553,6 +556,7 @@ describe("setup and doctor integration", () => {
       "n",
       "n",
       "y",
+      "n",
       "n",
       "n",
       "n",

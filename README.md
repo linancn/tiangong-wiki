@@ -117,6 +117,8 @@ tiangong-wiki dashboard                               # open dashboard in browse
 
 > Environment variables are managed via `.wiki.env` (created by `tiangong-wiki setup`). The CLI prefers the nearest local `.wiki.env`, then falls back to the global default workspace config. See [references/troubleshooting.md](./references/troubleshooting.md) for the full reference. For a centralized Linux + `systemd` + Nginx deployment, see [references/centralized-service-deployment.md](./references/centralized-service-deployment.md). That deployment guide now also includes Git repository / GitHub remote setup for daemon-side commit and optional auto-push.
 
+For document-heavy vaults, set `WIKI_PARSER_SKILLS=document-granular-decompose` and configure `UNSTRUCTURED_API_BASE_URL` plus `UNSTRUCTURED_AUTH_TOKEN` to prefer the TianGong Unstructure parser. The wiki workflow uses `return_txt=true` and consumes the plain `txt` text as the agent input; `UNSTRUCTURED_PROVIDER` and `UNSTRUCTURED_MODEL` are optional overrides.
+
 ## MCP Server
 
 Tiangong Wiki ships a separate MCP adapter that talks to the daemon over HTTP. It uses the MCP Streamable HTTP transport, not stdio.
